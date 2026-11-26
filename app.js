@@ -13,6 +13,7 @@
   // App state
   const state = {
     backendOnline: false,
+    backendAuth: false,
     user: null,
     selectedInterests: ['tecnologia', 'cafe_vinos'],
     selectedStores: STORES.map(s => s.id),
@@ -74,15 +75,23 @@
 
   async function checkBackend() {
     try {
-      const res = await fetch('/api/health', { signal: AbortSignal.timeout(1500) });
+      const res = await fetch('/api/health', { signal: AbortSignal.timeout(2500) });
       if (res.ok) {
+        const info = await res.json().catch(() => ({}));
         state.backendOnline = true;
+        state.backendAuth = info.auth !== 'local';
         $('backend-status-dot').classList.add('live');
-        $('backend-status-title').textContent = 'Backend Scraper + SQLite Activo';
-        $('backend-status-desc').textContent = 'Conectado al servidor local Python. Búsqueda en vivo en tiendas abiertas y cuentas persistidas en SQLite.';
+        if (info.mode === 'vercel_serverless') {
+          $('backend-status-title').textContent = 'Scraper en Vivo Activo (Cloud)';
+          $('backend-status-desc').textContent = 'Búsqueda en tiempo real en Falabella, Ripley, Paris, Jumbo y Santa Isabel. Cuentas y favoritos guardados en tu navegador.';
+        } else {
+          $('backend-status-title').textContent = 'Backend Scraper + SQLite Activo';
+          $('backend-status-desc').textContent = 'Conectado al servidor local Python. Búsqueda en vivo en tiendas abiertas y cuentas persistidas en SQLite.';
+        }
       }
     } catch {
       state.backendOnline = false;
+      state.backendAuth = false;
     }
   }
 
@@ -141,7 +150,7 @@
     if (!raw) return;
     try {
       const session = JSON.parse(raw);
-      if (state.backendOnline && session.token) {
+      if (state.backendAuth && session.token) {
         const res = await fetch('/api/me', {
           headers: { Authorization: 'Bearer ' + session.token }
         });
@@ -178,7 +187,7 @@
       return;
     }
 
-    if (state.backendOnline) {
+    if (state.backendAuth) {
       const endpoint = state.authMode === 'register' ? '/api/register' : '/api/login';
       try {
         const res = await fetch(endpoint, {
@@ -231,7 +240,7 @@
   }
 
   async function loginWithDemo() {
-    if (state.backendOnline) {
+    if (state.backendAuth) {
       try {
         const res = await fetch('/api/login', {
           method: 'POST',
@@ -291,7 +300,7 @@
     const existsIdx = (state.user.savedGifts || []).findIndex(g => g.id === item.id);
     if (existsIdx >= 0) {
       state.user.savedGifts.splice(existsIdx, 1);
-      if (state.backendOnline && state.user.token) {
+      if (state.backendAuth && state.user.token) {
         fetch('/api/saved-gifts/' + encodeURIComponent(item.id), {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + state.user.token }
@@ -301,7 +310,7 @@
     } else {
       const savedItem = { ...item, savedAt: new Date().toISOString(), note: '' };
       state.user.savedGifts = [savedItem, ...(state.user.savedGifts || [])];
-      if (state.backendOnline && state.user.token) {
+      if (state.backendAuth && state.user.token) {
         fetch('/api/saved-gifts', {
           method: 'POST',
           headers: {
@@ -326,7 +335,7 @@
     if (!item) return;
     item.note = note;
     persistCurrentUserLocal();
-    if (state.backendOnline && state.user.token) {
+    if (state.backendAuth && state.user.token) {
       fetch('/api/saved-gifts/' + encodeURIComponent(giftId) + '/note', {
         method: 'PUT',
         headers: {
@@ -360,7 +369,7 @@
     state.user.savedSearches = [entry, ...(state.user.savedSearches || [])].slice(0, 20);
     persistCurrentUserLocal();
 
-    if (state.backendOnline && state.user.token) {
+    if (state.backendAuth && state.user.token) {
       fetch('/api/saved-searches', {
         method: 'POST',
         headers: {
