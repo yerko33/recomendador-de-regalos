@@ -7,7 +7,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/finder.css" />
+  <link rel="stylesheet" href="css/cards.css" />
+  <link rel="stylesheet" href="css/saved-modal.css" />
 </head>
 <body>
   <!-- Top Navigation -->
@@ -48,18 +52,7 @@
               Cuéntanos los intereses, tu presupuesto y cualquier pista sobre la persona.
               Comparamos opciones en <strong>Falabella, Ripley, Paris, Líder, Jumbo, Santa Isabel</strong> y más tiendas de Chile para darte un <strong>Top 3 personalizado</strong> y decenas de ideas extra.
             </p>
-            <div class="store-marquee" aria-label="Tiendas monitoreadas">
-              <span class="store-chip store-falabella">Falabella</span>
-              <span class="store-chip store-ripley">Ripley</span>
-              <span class="store-chip store-paris">Paris</span>
-              <span class="store-chip store-abc">Abcdin / La Polar (abc)</span>
-              <span class="store-chip store-lider">Líder / Walmart</span>
-              <span class="store-chip store-jumbo">Jumbo</span>
-              <span class="store-chip store-santaisabel">Santa Isabel</span>
-              <span class="store-chip store-mercadolibre">MercadoLibre</span>
-              <span class="store-chip store-casaideas">Casaideas</span>
-              <span class="store-chip store-pcfactory">PC Factory</span>
-            </div>
+            <div class="store-marquee" id="store-marquee" aria-label="Tiendas monitoreadas"></div>
           </div>
           <div class="scraper-status-card" id="scraper-status-card">
             <div class="status-dot" id="backend-status-dot"></div>
@@ -358,6 +351,6 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="data/catalog.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

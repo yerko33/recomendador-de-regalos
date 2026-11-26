@@ -585,5 +585,35 @@ window.REGALACL_CATALOG = [
     recipients: ['cualquiera', 'nino', 'amigo', 'pareja'],
     occasions: ['cualquiera', 'cumpleanos', 'navidad'],
     keywords: ['pintura', 'arte', 'dibujar', 'creativo', 'pinceles', 'hobby']
+  },
+  {
+    id: 'cl-037',
+    title: 'Audífonos Soundcore Bluetooth In Ear P25i Negro',
+    storeId: 'abc',
+    price: 19990,
+    oldPrice: 25990,
+    rating: 4.8,
+    reviews: 140,
+    emoji: '🎧',
+    bg: '#ffedd5',
+    interests: ['tecnologia', 'musica'],
+    recipients: ['cualquiera', 'amigo', 'pareja', 'adolescente'],
+    occasions: ['cualquiera', 'cumpleanos', 'navidad'],
+    keywords: ['audifonos', 'bluetooth', 'soundcore', 'musica', 'abc', 'abcdin', 'lapolar']
+  },
+  {
+    id: 'cl-038',
+    title: 'Billetera Mujer Zibel Eco Cuero Compacta',
+    storeId: 'abc',
+    price: 9990,
+    oldPrice: 14990,
+    rating: 4.6,
+    reviews: 92,
+    emoji: '👛',
+    bg: '#ffedd5',
+    interests: ['accesorios'],
+    recipients: ['cualquiera', 'mama', 'pareja', 'amiga'],
+    occasions: ['cualquiera', 'cumpleanos', 'navidad', 'detalle'],
+    keywords: ['billetera', 'cartera', 'accesorio', 'regalo', 'abc', 'abcdin', 'lapolar']
   }
 ];

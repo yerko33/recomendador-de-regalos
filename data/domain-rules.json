@@ -1,0 +1,247 @@
+{
+  "stopwords": [
+    "a", "abuela", "abuelo", "al", "algo", "algun", "alguna", "algunos", "ama",
+    "amiga", "amigo", "aniversario", "asi", "bien", "bonito", "buen", "buena",
+    "bueno", "busca", "buscando", "busco", "casa", "como", "comprar", "con",
+    "cosas", "cumple", "cumpleanos", "dar", "de", "del", "dia", "el", "ella",
+    "ellos", "en", "encanta", "encantan", "es", "esa", "ese", "eso", "especial",
+    "esta", "estar", "este", "fascina", "favorito", "gusta", "gustan",
+    "gustaria", "hacer", "hace", "haciendo", "hermana", "hermano", "hija",
+    "hijo", "idea", "ideas", "ir", "la", "las", "le", "les", "lindo", "lo",
+    "los", "mama", "mas", "me", "mi", "mucho", "muy", "navidad", "necesita",
+    "ni", "no", "nos", "o", "papa", "para", "pareja", "pero", "persona", "poco",
+    "por", "porque", "practico", "prepara", "preparar", "prima", "primo", "que",
+    "quiere", "regalar", "regalo", "regalos", "se", "si", "siempre", "sin",
+    "sobre", "sobrina", "sobrino", "solo", "son", "su", "sus", "tambien", "tan",
+    "te", "tener", "tia", "tiene", "tio", "tipo", "todo", "todos", "tomar",
+    "un", "una", "unas", "uno", "unos", "usar", "usa", "ver", "y"
+  ],
+  "multiwordSynonyms": {
+    "cosas dulces": "reposteria moldes hornear",
+    "preparar dulces": "reposteria moldes hornear",
+    "hacer dulces": "reposteria moldes hornear",
+    "hacer postres": "reposteria moldes postres",
+    "preparar postres": "reposteria moldes postres",
+    "hacer galletas": "reposteria moldes galletas",
+    "hacer tortas": "reposteria moldes torta",
+    "hacer queques": "reposteria molde queque",
+    "tomar cafe": "cafetera prensa francesa",
+    "tomar vino": "vino copas sacacorchos",
+    "escuchar musica": "audifonos parlante bluetooth",
+    "cuidar piel": "skincare crema facial",
+    "hacer deporte": "fitness botella termica",
+    "hacer ejercicio": "fitness mancuernas yoga",
+    "hacer asados": "set parrillero accesorios"
+  },
+  "phraseSynonyms": {
+    "maquillarse": "set maquillaje",
+    "maquillar": "set maquillaje",
+    "maquillaje": "set maquillaje",
+    "makeup": "maquillaje",
+    "pintarse": "maquillaje labial",
+    "aros": "aros joya",
+    "aretes": "aros joya",
+    "dulces": "reposteria moldes hornear",
+    "dulce": "reposteria moldes hornear",
+    "postres": "reposteria moldes postres",
+    "postre": "reposteria moldes postres",
+    "galletas": "reposteria moldes galletas",
+    "tortas": "reposteria moldes torta",
+    "torta": "reposteria moldes torta",
+    "queques": "reposteria molde queque",
+    "cupcakes": "reposteria molde cupcake",
+    "pasteleria": "set reposteria pasteleria",
+    "reposteria": "set reposteria moldes",
+    "hornear": "reposteria moldes hornear",
+    "parrilladas": "set parrillero accesorios asado",
+    "parrillada": "set parrillero accesorios asado",
+    "parrilla": "set parrillero",
+    "asados": "set parrillero",
+    "asado": "set parrillero",
+    "cocinar": "utensilios cocina",
+    "correr": "running deportivo",
+    "trotar": "running deportivo",
+    "entrenar": "fitness mancuernas",
+    "ejercitar": "fitness entrenamiento",
+    "ejercicios": "fitness entrenamiento",
+    "acampar": "camping outdoor",
+    "senderismo": "trekking mochila",
+    "leer": "libro novela",
+    "leyendo": "libro novela",
+    "jugar": "gamer juegos",
+    "videojuegos": "audifonos gamer videojuegos",
+    "escuchar": "audifonos parlante",
+    "relajarse": "spa masajeador aroma",
+    "descansar": "masajeador manta",
+    "perfumarse": "perfume",
+    "pintar": "pintura acrilica pinceles",
+    "dibujar": "dibujo lapices colores",
+    "cafetero": "cafetera",
+    "barista": "cafetera espresso",
+    "tejer": "set crochet palillos lana",
+    "coser": "set costura",
+    "plantas": "macetero herramientas jardineria",
+    "jardineria": "set herramientas jardineria"
+  },
+  "interestQueryMap": {
+    "tecnologia": "audifonos bluetooth",
+    "gaming": "mouse teclado gamer",
+    "cocina": "set cocina freidora",
+    "cafe_vinos": "cafetera vino copas",
+    "deporte": "botella termica trekking",
+    "belleza": "set maquillaje skincare",
+    "hogar": "difusor aromas decoracion",
+    "musica": "parlante audifonos bluetooth",
+    "lectura": "libreta moleskine libros",
+    "moda": "poleron chaqueta polera ropa",
+    "accesorios": "billetera cartera aros joya",
+    "bienestar": "masajeador spa velas",
+    "mascotas": "cama juguete perro gato",
+    "juguetes": "juguete didactico lego",
+    "bebes": "juguete bebe sonajero manta",
+    "automovil": "accesorios auto soporte cargador aspiradora",
+    "herramientas": "set herramientas destornillador caja"
+  },
+  "interestVocab": {
+    "tecnologia": [
+      "audifon", "bluet", "smartwatch", "reloj", "cargador", "powerbank",
+      "bateria", "parlant", "tablet", "kindle", "usb", "inalambr", "smart",
+      "camara", "proyector", "teclado", "mouse", "alexa", "echo", "airpods",
+      "sony", "xiaomi", "anker", "jbl", "samsung", "apple", "huawei", "gamer"
+    ],
+    "gaming": [
+      "gamer", "gaming", "mouse", "teclado", "rgb", "headset", "audifon",
+      "control", "joystick", "mando", "playstation", "nintendo", "xbox",
+      "silla", "pad", "microfono", "logitech", "razer", "hyperx", "redragon",
+      "catan", "juego", "lego", "videojuego"
+    ],
+    "cocina": [
+      "cocin", "freidor", "airfryer", "olla", "sarten", "cuchill", "batidor",
+      "licuador", "horno", "hornear", "tostador", "waffler", "tabla",
+      "parriller", "parrilla", "asado", "delantal", "tenaza", "pinza",
+      "termometro", "molde", "reposter", "pasteler", "manga pastel",
+      "boquilla", "cortador", "galleta", "cupcake", "muffin", "queque",
+      "torta", "uslero", "rodillo", "espatula", "bascula", "pesa cocina",
+      "bowl", "bandeja horno", "silicona", "espumador", "hervidor",
+      "procesador", "oster", "tefal", "kitchen", "utensilio", "ramekin"
+    ],
+    "cafe_vinos": [
+      "cafe", "cafeter", "espresso", "moka", "bialetti", "nespresso", "prensa",
+      "molinillo", "taza", "termo", "vino", "copa", "sacacorcho", "decantador",
+      "espumante", "whisky", "gin", "coctel", "infusor", "mate"
+    ],
+    "deporte": [
+      "deport", "trekking", "outdoor", "camping", "botella", "termo", "stanley",
+      "mochila", "yoga", "mancuerna", "pesa", "running", "biciclet",
+      "fitness", "entren", "banda elast", "cuerda", "zapatilla", "lippi",
+      "doite", "columbia", "nike", "adidas", "puma"
+    ],
+    "belleza": [
+      "maquill", "labial", "gloss", "sombra", "paleta", "rubor", "blush",
+      "delineador", "rimel", "mascara", "brocha", "esponja", "base", "polvo",
+      "corrector", "iluminador", "primer", "fijador", "cosmetic", "makeup",
+      "skincare", "serum", "crema", "hidrat", "facial", "rostro", "contorno",
+      "protector solar", "bloqueador", "perfume", "eau de", "fragancia",
+      "colonia", "body mist", "exfoliant", "limpiador", "micelar", "tonico",
+      "esmalte", "unas", "secador", "alisador", "ondulador", "cepill",
+      "espejo", "neceser", "cosmetiquero", "estuche", "belleza", "cuidado",
+      "maybelline", "loreal", "revlon", "nyx", "mac", "clinique", "lancome",
+      "dior", "cerave", "roche", "eucerin", "vichy", "nivea", "natura",
+      "essence", "catrice", "petrizzio", "dbs", "etienne", "garnier"
+    ],
+    "hogar": [
+      "hogar", "deco", "manta", "cojin", "lampara", "vela", "difusor", "aroma",
+      "florero", "cuadro", "espejo", "organizador", "canasto", "alfombra",
+      "taza", "vaso", "plato", "bandeja", "tabla", "macetero", "planta",
+      "sabana", "plumon", "toalla", "bano"
+    ],
+    "musica": [
+      "audifon", "parlant", "speaker", "vinilo", "tornamesa", "tocadisco",
+      "guitarra", "ukelele", "microfono", "audio", "bluet", "jbl", "sony",
+      "marshall", "bose", "soundcore", "musica"
+    ],
+    "lectura": [
+      "libro", "novela", "kindle", "lector", "libreta", "cuaderno", "agenda",
+      "moleskine", "lapiz", "pluma", "marcador", "papeleria", "pintura",
+      "acrilic", "acuarela", "pincel", "dibujo", "comic", "manga"
+    ],
+    "moda": [
+      "poleron", "chaqueta", "polera", "camisa", "blusa", "sweater", "chaleco",
+      "pantalon", "jeans", "vestido", "falda", "pijama", "bata", "parka",
+      "cortaviento", "polar", "calcetin", "zapatilla", "botin", "ropa",
+      "bufanda", "panuelo", "gorro", "guante", "camiseta", "short", "bermuda"
+    ],
+    "accesorios": [
+      "aro", "aros", "arete", "pendiente", "argolla", "collar", "colgante",
+      "pulsera", "anillo", "joya", "plata 925", "bano de oro", "oro",
+      "billetera", "cartera", "bolso", "mochila", "bandolera", "lente", "gafa",
+      "reloj", "cinturon", "cuero", "accesorio"
+    ],
+    "bienestar": [
+      "masaje", "spa", "vela", "difusor", "aroma", "aceite esencial", "sales",
+      "bano", "yoga", "meditacion", "relax", "almohada", "manta", "guatero",
+      "infusion", "humidificador", "cuidado", "crema"
+    ],
+    "mascotas": [
+      "perro", "gato", "mascota", "cama", "rascador", "juguete", "correa",
+      "arnes", "collar", "comedero", "bebedero", "transportador", "snack"
+    ],
+    "juguetes": [
+      "juguete", "lego", "muneca", "barbie", "hot wheels", "playset",
+      "rompecabeza", "puzzle", "peluche", "didactico", "pistola nerf",
+      "nerf", "figura", "juego de mesa", "bloques", "infantil", "nino", "nina"
+    ],
+    "bebes": [
+      "bebe", "sonajero", "mordedor", "estimulacion", "manta", "peluche",
+      "gimnasio bebe", "movil cuna", "babero", "chupete", "mamadera",
+      "pijama", "body", "osito", "didactico", "fisher price", "chicco"
+    ],
+    "automovil": [
+      "auto", "vehiculo", "automovil", "soporte celular", "aspiradora",
+      "cargador auto", "maletero", "volante", "asiento", "funda", "compresor",
+      "inflador", "cera", "shampoo auto", "microfibra", "dashcam", "parasol",
+      "aromatizante", "llavero", "espejo", "led auto", "organizador auto"
+    ],
+    "herramientas": [
+      "herramienta", "taladro", "atornillador", "destornillador", "llave",
+      "alicate", "martillo", "caja herramienta", "maletin", "chicharra",
+      "dado", "cinta metrica", "huincha", "nivel", "sierra", "multiuso",
+      "linterna", "bosch", "makita", "stanley", "bauker", "black decker",
+      "truper", "einhell", "broca", "prensa", "soldador"
+    ]
+  },
+  "childRecipients": ["bebe_0_2", "nino_3_4", "nino", "adolescente"],
+  "kidsPatterns": [
+    "infantil\\w*", "nina\\w*", "nino\\w*", "juguete\\w*", "barbie",
+    "princesa\\w*", "frozen", "minnie", "unicornio", "sorpresa\\w*",
+    "expendedora", "muneca\\w*", "playset", "kids", "giotto", "tempera",
+    "plastilina", "disfraz", "didactico\\w*", "sonajero\\w*", "bebe\\w*",
+    "hello kitty", "disney", "stitch", "my little pony", "maleta make"
+  ],
+  "nonGiftableFoodPatterns": [
+    "longaniza\\w*", "chorizo\\w*", "choricillo\\w*", "prieta\\w*",
+    "salchicha\\w*", "vienesa\\w*", "hamburguesa\\w*", "tocino",
+    "carne", "vacuno", "cerdo", "pollo", "pavo",
+    "costillar", "lomo", "entrana", "sobrecostilla",
+    "huachalomo", "abastero", "plateada", "chuleta\\w*",
+    "trutro\\w*", "pechuga\\w*", "pescado", "salmon", "atun",
+    "cebolla\\w*", "calamar\\w*", "camaron\\w*", "marisco\\w*",
+    "cereal\\w*", "arroz", "fideo\\w*", "tallarin\\w*",
+    "harina", "azucar", "leche", "yogurt", "queso",
+    "jamon", "mantequilla", "margarina", "aceite",
+    "salsa", "ketchup", "mayonesa", "mostaza", "pebre",
+    "chimichurri", "alino", "condimento", "sazonador",
+    "papa\\w* frita\\w*", "snack", "manjar", "mermelada",
+    "galleta\\w*", "marraqueta", "hallulla",
+    "helado\\w*", "jugo", "bebida", "carbon", "briqueta\\w*",
+    "detergente", "lavalozas", "cloro", "papel higienico",
+    "servilleta\\w*", "congelado\\w*", "prefrito\\w*",
+    "super cerdo", "llanquihue", "san jorge", "receta del abuelo", "soproval"
+  ],
+  "giftUtensilExemptPatterns": [
+    "molde\\w*", "cortador\\w*", "tabla", "cuchillo\\w*", "tenedor\\w*",
+    "pinza\\w*", "termometro", "delantal", "utensilio\\w*", "reposter\\w*",
+    "pasteler\\w*", "parrilla\\b", "parrillero", "esencial\\w*", "facial",
+    "corporal", "difusor", "masaje\\w*", "set\\b", "kit\\b", "estuche"
+  ]
+}

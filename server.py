@@ -1,42 +1,68 @@
 """
 Servidor local para RegalaCL (sin dependencias externas — solo biblioteca estándar de Python 3).
-Incluye:
-- Lista blanca explícita de archivos estáticos (evita exponer regalacl.db, .git/ o código backend)
-- Base de datos SQLite (regalacl.db) con sesiones con expiración de 7 días y revocación en /api/logout
-- Límite de tamaño de cuerpo HTTP y cabeceras de seguridad
-- Endpoint /api/scrape conectado a scraper.py
+- Lista blanca explícita de estáticos + mapa MIME seguro (evita bloqueo de .js en Windows con nosniff)
+- SQLite con cierre garantizado (contextlib.closing), WAL mode, FK activas y sesiones con TTL de 7 días
+- Dispatch de rutas declarativo y validación compartida con Vercel mediante scraper.handle_scrape_payload
 """
 
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import json
-import mimetypes
+import logging
 import os
 import secrets
 import sqlite3
 import urllib.parse
 
-from scraper import scrape_chilean_stores
+from scraper import handle_scrape_payload
+
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("regalacl.server")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "regalacl.db")
 PORT = int(os.environ.get("PORT", "8000"))
-MAX_BODY_BYTES = 16 * 1024  # 16 KB
+MAX_BODY_BYTES = 16 * 1024
 SESSION_TTL_DAYS = 7
+
+MIME_TYPES = {
+    ".html": "text/html",
+    ".css": "text/css",
+    ".js": "application/javascript",
+    ".json": "application/json",
+}
 
 STATIC_ALLOWLIST = {
     "/": "index.html",
     "/index.html": "index.html",
-    "/styles.css": "styles.css",
-    "/app.js": "app.js",
     "/data/catalog.js": os.path.join("data", "catalog.js"),
+    "/data/domain-rules.json": os.path.join("data", "domain-rules.json"),
+    "/css/tokens.css": os.path.join("css", "tokens.css"),
+    "/css/layout.css": os.path.join("css", "layout.css"),
+    "/css/finder.css": os.path.join("css", "finder.css"),
+    "/css/cards.css": os.path.join("css", "cards.css"),
+    "/css/saved-modal.css": os.path.join("css", "saved-modal.css"),
+    "/js/utils.js": os.path.join("js", "utils.js"),
+    "/js/auth-store.js": os.path.join("js", "auth-store.js"),
+    "/js/recommender.js": os.path.join("js", "recommender.js"),
+    "/js/ui-render.js": os.path.join("js", "ui-render.js"),
+    "/js/main.js": os.path.join("js", "main.js"),
 }
 
 
+@contextmanager
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def hash_password(password: str, salt: str = None):
@@ -56,6 +82,8 @@ def verify_password(password: str, stored: str) -> bool:
 
 def init_db():
     with get_db() as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -90,31 +118,27 @@ def init_db():
             );
             """
         )
-        cur = conn.execute("SELECT id FROM users WHERE email = ?", ("demo@regalacl.cl",))
-        if not cur.fetchone():
+        # Limpiar sesiones expiradas al iniciar
+        conn.execute("DELETE FROM sessions WHERE created_at < datetime('now', ?)", (f"-{SESSION_TTL_DAYS} days",))
+        if not conn.execute("SELECT id FROM users WHERE email = ?", ("demo@regalacl.cl",)).fetchone():
             conn.execute(
                 "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
                 ("Usuario Demo", "demo@regalacl.cl", hash_password("demo")),
             )
-        conn.commit()
 
 
 def serialize_user(conn, user_row):
     uid = user_row["id"]
-    gifts_rows = conn.execute(
-        "SELECT gift_json, note FROM saved_gifts WHERE user_id = ? ORDER BY id DESC", (uid,)
-    ).fetchall()
     saved_gifts = []
-    for r in gifts_rows:
+    for r in conn.execute("SELECT gift_json, note FROM saved_gifts WHERE user_id = ? ORDER BY id DESC", (uid,)):
         item = json.loads(r["gift_json"])
         item["note"] = r["note"] or ""
         saved_gifts.append(item)
 
-    searches_rows = conn.execute(
-        "SELECT search_json FROM saved_searches WHERE user_id = ? ORDER BY id DESC LIMIT 20", (uid,)
-    ).fetchall()
-    saved_searches = [json.loads(r["search_json"]) for r in searches_rows]
-
+    saved_searches = [
+        json.loads(r["search_json"])
+        for r in conn.execute("SELECT search_json FROM saved_searches WHERE user_id = ? ORDER BY id DESC LIMIT 20", (uid,))
+    ]
     return {
         "id": uid,
         "name": user_row["name"],
@@ -137,6 +161,7 @@ class RegalaHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
@@ -157,12 +182,13 @@ class RegalaHandler(BaseHTTPRequestHandler):
         full_path = os.path.join(BASE_DIR, rel_path)
         if not os.path.isfile(full_path):
             return self._send_json(404, {"error": "Archivo no encontrado"})
-        ctype, _ = mimetypes.guess_type(full_path)
+        ext = os.path.splitext(full_path)[1].lower()
+        ctype = MIME_TYPES.get(ext, "application/octet-stream")
         with open(full_path, "rb") as f:
             data = f.read()
         self.send_response(200)
         self._send_security_headers()
-        self.send_header("Content-Type", f"{ctype or 'application/octet-stream'}; charset=utf-8")
+        self.send_header("Content-Type", f"{ctype}; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -171,25 +197,23 @@ class RegalaHandler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
         except ValueError:
-            raise InvalidJsonError("Content-Length inválido")
+            raise InvalidJsonError()
         if length < 0 or length > MAX_BODY_BYTES:
-            raise PayloadTooLargeError("Cuerpo demasiado grande")
+            raise PayloadTooLargeError()
         if length == 0:
             return {}
         raw = self.rfile.read(length).decode("utf-8", errors="ignore")
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
-            raise InvalidJsonError("JSON inválido")
+            raise InvalidJsonError()
         if not isinstance(parsed, dict):
-            raise InvalidJsonError("Se esperaba un objeto JSON")
+            raise InvalidJsonError()
         return parsed
 
     def _get_bearer_token(self):
         auth = self.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
-            return None
-        return auth[7:].strip() or None
+        return auth[7:].strip() if auth.startswith("Bearer ") and auth[7:].strip() else None
 
     def _get_auth_user(self, conn):
         token = self._get_bearer_token()
@@ -199,31 +223,95 @@ class RegalaHandler(BaseHTTPRequestHandler):
             """
             SELECT u.* FROM users u
             JOIN sessions s ON s.user_id = u.id
-            WHERE s.token = ?
-              AND s.created_at >= datetime('now', ?)
+            WHERE s.token = ? AND s.created_at >= datetime('now', ?)
             """,
             (token, f"-{SESSION_TTL_DAYS} days"),
         ).fetchone()
 
     def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/health":
+        path = urllib.parse.urlparse(self.path).path
+        if path == "/api/health":
             return self._send_json(200, {"status": "ok", "service": "RegalaCL"})
-
-        if parsed.path == "/api/me":
+        if path == "/api/me":
             with get_db() as conn:
                 user = self._get_auth_user(conn)
                 if not user:
                     return self._send_json(401, {"error": "No autorizado"})
                 return self._send_json(200, {"user": serialize_user(conn, user)})
-
-        if parsed.path in STATIC_ALLOWLIST:
-            return self._serve_static(STATIC_ALLOWLIST[parsed.path])
-
+        if path in STATIC_ALLOWLIST:
+            return self._serve_static(STATIC_ALLOWLIST[path])
         return self._send_json(404, {"error": "Ruta no encontrada"})
 
+    # --- Handlers POST ---
+    def _post_logout(self, _data):
+        token = self._get_bearer_token()
+        if token:
+            with get_db() as conn:
+                conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        return 200, {"ok": True}
+
+    def _post_register(self, data):
+        name = str(data.get("name") or "").strip()[:80]
+        email = str(data.get("email") or "").strip().lower()[:120]
+        password = str(data.get("password") or "")
+        if not email or "@" not in email or len(password) < 8:
+            return 400, {"error": "Correo inválido o contraseña menor a 8 caracteres."}
+        with get_db() as conn:
+            try:
+                cur = conn.execute(
+                    "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+                    (name or email.split("@")[0], email, hash_password(password)),
+                )
+                uid = cur.lastrowid
+                token = secrets.token_urlsafe(32)
+                conn.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, uid))
+                user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+                return 201, {"token": token, "user": serialize_user(conn, user)}
+            except sqlite3.IntegrityError:
+                return 409, {"error": "Ya existe una cuenta con ese correo."}
+
+    def _post_login(self, data):
+        email = str(data.get("email") or "").strip().lower()
+        password = str(data.get("password") or "")
+        with get_db() as conn:
+            user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+            if not user or not verify_password(password, user["password_hash"]):
+                return 401, {"error": "Correo o contraseña incorrectos."}
+            token = secrets.token_urlsafe(32)
+            conn.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user["id"]))
+            return 200, {"token": token, "user": serialize_user(conn, user)}
+
+    def _post_saved_gifts(self, data):
+        gift = data.get("gift")
+        if not isinstance(gift, dict) or not str(gift.get("id") or "").strip():
+            return 400, {"error": "Regalo inválido."}
+        gid = str(gift.get("id"))[:100]
+        with get_db() as conn:
+            user = self._get_auth_user(conn)
+            if not user:
+                return 401, {"error": "Inicia sesión para guardar regalos."}
+            conn.execute(
+                "INSERT OR REPLACE INTO saved_gifts (user_id, gift_id, gift_json, note) VALUES (?, ?, ?, ?)",
+                (user["id"], gid, json.dumps(gift, ensure_ascii=False), str(gift.get("note", ""))[:300]),
+            )
+            return 200, {"ok": True}
+
+    def _post_saved_searches(self, data):
+        search = data.get("search")
+        if not isinstance(search, dict):
+            return 400, {"error": "Búsqueda inválida."}
+        with get_db() as conn:
+            user = self._get_auth_user(conn)
+            if not user:
+                return 401, {"error": "Inicia sesión para guardar búsquedas."}
+            conn.execute(
+                "INSERT INTO saved_searches (user_id, search_json) VALUES (?, ?)",
+                (user["id"], json.dumps(search, ensure_ascii=False)),
+            )
+            return 200, {"ok": True}
+
     def do_POST(self):
-        parsed = urllib.parse.urlparse(self.path)
+        path = urllib.parse.urlparse(self.path).path
         try:
             data = self._read_json()
         except PayloadTooLargeError:
@@ -231,118 +319,34 @@ class RegalaHandler(BaseHTTPRequestHandler):
         except InvalidJsonError:
             return self._send_json(400, {"error": "JSON inválido."})
 
-        if parsed.path == "/api/logout":
-            token = self._get_bearer_token()
-            if token:
-                with get_db() as conn:
-                    conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
-                    conn.commit()
-            return self._send_json(200, {"ok": True})
-
-        if parsed.path == "/api/register":
-            name = str(data.get("name") or "").strip()[:80]
-            email = str(data.get("email") or "").strip().lower()[:120]
-            password = str(data.get("password") or "")
-            if not email or "@" not in email or len(password) < 8:
-                return self._send_json(400, {"error": "Correo inválido o contraseña menor a 8 caracteres."})
-            with get_db() as conn:
-                try:
-                    cur = conn.execute(
-                        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-                        (name or email.split("@")[0], email, hash_password(password)),
-                    )
-                    uid = cur.lastrowid
-                    token = secrets.token_urlsafe(32)
-                    conn.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, uid))
-                    conn.commit()
-                    user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
-                    return self._send_json(201, {"token": token, "user": serialize_user(conn, user)})
-                except sqlite3.IntegrityError:
-                    return self._send_json(409, {"error": "Ya existe una cuenta con ese correo."})
-
-        if parsed.path == "/api/login":
-            email = str(data.get("email") or "").strip().lower()
-            password = str(data.get("password") or "")
-            with get_db() as conn:
-                user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-                if not user or not verify_password(password, user["password_hash"]):
-                    return self._send_json(401, {"error": "Correo o contraseña incorrectos."})
-                token = secrets.token_urlsafe(32)
-                conn.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user["id"]))
-                conn.commit()
-                return self._send_json(200, {"token": token, "user": serialize_user(conn, user)})
-
-        if parsed.path == "/api/saved-gifts":
-            with get_db() as conn:
-                user = self._get_auth_user(conn)
-                if not user:
-                    return self._send_json(401, {"error": "Inicia sesión para guardar regalos."})
-                gift = data.get("gift")
-                if not isinstance(gift, dict):
-                    return self._send_json(400, {"error": "Regalo inválido."})
-                gid = str(gift.get("id") or "")[:100]
-                if not gid:
-                    return self._send_json(400, {"error": "Regalo inválido."})
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO saved_gifts (user_id, gift_id, gift_json, note)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (user["id"], gid, json.dumps(gift, ensure_ascii=False), str(gift.get("note", ""))[:300]),
-                )
-                conn.commit()
-                return self._send_json(200, {"ok": True})
-
-        if parsed.path == "/api/saved-searches":
-            with get_db() as conn:
-                user = self._get_auth_user(conn)
-                if not user:
-                    return self._send_json(401, {"error": "Inicia sesión para guardar búsquedas."})
-                search = data.get("search")
-                if not isinstance(search, dict):
-                    return self._send_json(400, {"error": "Búsqueda inválida."})
-                conn.execute(
-                    "INSERT INTO saved_searches (user_id, search_json) VALUES (?, ?)",
-                    (user["id"], json.dumps(search, ensure_ascii=False)),
-                )
-                conn.commit()
-                return self._send_json(200, {"ok": True})
-
-        if parsed.path == "/api/scrape":
-            interests = data.get("interests")
-            stores = data.get("stores")
-            if interests is not None and not isinstance(interests, list):
-                return self._send_json(400, {"error": "Campo 'interests' inválido.", "items": [], "storeStatuses": {}})
-            if stores is not None and not isinstance(stores, list):
-                return self._send_json(400, {"error": "Campo 'stores' inválido.", "items": [], "storeStatuses": {}})
-            try:
-                budget_min = max(0, int(data.get("budgetMin") or 0))
-                budget_max = min(5_000_000, max(1000, int(data.get("budgetMax") or 500000)))
-            except (TypeError, ValueError):
-                return self._send_json(400, {"error": "Presupuesto inválido.", "items": [], "storeStatuses": {}})
-            try:
-                result = scrape_chilean_stores(
-                    interests=interests or [],
-                    reference=str(data.get("reference") or "")[:200],
-                    budget_min=budget_min,
-                    budget_max=budget_max,
-                    stores=stores or [],
-                    recipient=str(data.get("recipient") or "cualquiera")[:40],
-                )
-                return self._send_json(200, result)
-            except Exception:
-                return self._send_json(500, {"error": "No se pudo completar la búsqueda.", "items": [], "storeStatuses": {}})
-
-        return self._send_json(404, {"error": "Ruta no encontrada"})
+        routes = {
+            "/api/logout": self._post_logout,
+            "/api/register": self._post_register,
+            "/api/login": self._post_login,
+            "/api/saved-gifts": self._post_saved_gifts,
+            "/api/saved-searches": self._post_saved_searches,
+            "/api/scrape": handle_scrape_payload,
+        }
+        handler_fn = routes.get(path)
+        if not handler_fn:
+            return self._send_json(404, {"error": "Ruta no encontrada"})
+        try:
+            status, payload = handler_fn(data)
+            return self._send_json(status, payload)
+        except sqlite3.Error as exc:
+            logger.exception("SQLite error on %s: %s", path, exc)
+            return self._send_json(500, {"error": "Error interno de base de datos."})
 
     def do_PUT(self):
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.startswith("/api/saved-gifts/") and parsed.path.endswith("/note"):
-            gift_id = urllib.parse.unquote(parsed.path[len("/api/saved-gifts/"):-len("/note")])
+        path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/saved-gifts/") and path.endswith("/note"):
+            gift_id = urllib.parse.unquote(path[len("/api/saved-gifts/"):-len("/note")])
             try:
                 data = self._read_json()
-            except (PayloadTooLargeError, InvalidJsonError):
-                return self._send_json(400, {"error": "Solicitud inválida."})
+            except PayloadTooLargeError:
+                return self._send_json(413, {"error": "Solicitud demasiado grande."})
+            except InvalidJsonError:
+                return self._send_json(400, {"error": "JSON inválido."})
             with get_db() as conn:
                 user = self._get_auth_user(conn)
                 if not user:
@@ -351,23 +355,18 @@ class RegalaHandler(BaseHTTPRequestHandler):
                     "UPDATE saved_gifts SET note = ? WHERE user_id = ? AND gift_id = ?",
                     (str(data.get("note", ""))[:300], user["id"], gift_id),
                 )
-                conn.commit()
                 return self._send_json(200, {"ok": True})
         return self._send_json(404, {"error": "Ruta no encontrada"})
 
     def do_DELETE(self):
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.startswith("/api/saved-gifts/"):
-            gift_id = urllib.parse.unquote(parsed.path[len("/api/saved-gifts/"):])
+        path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/saved-gifts/"):
+            gift_id = urllib.parse.unquote(path[len("/api/saved-gifts/"):])
             with get_db() as conn:
                 user = self._get_auth_user(conn)
                 if not user:
                     return self._send_json(401, {"error": "No autorizado"})
-                conn.execute(
-                    "DELETE FROM saved_gifts WHERE user_id = ? AND gift_id = ?",
-                    (user["id"], gift_id),
-                )
-                conn.commit()
+                conn.execute("DELETE FROM saved_gifts WHERE user_id = ? AND gift_id = ?", (user["id"], gift_id))
                 return self._send_json(200, {"ok": True})
         return self._send_json(404, {"error": "Ruta no encontrada"})
 
@@ -375,7 +374,7 @@ class RegalaHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     init_db()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), RegalaHandler)
-    print(f"RegalaCL corriendo en http://localhost:{PORT}")
+    logger.info("RegalaCL corriendo en http://localhost:%d", PORT)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
