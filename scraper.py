@@ -133,7 +133,7 @@ INTEREST_QUERY_MAP = {
     "hogar": "difusor aromas decoracion",
     "musica": "parlante audifonos bluetooth",
     "lectura": "libreta moleskine libros",
-    "moda": "aros billetera cartera",
+    "moda": "billetera cartera aros joya",
     "bienestar": "masajeador spa velas",
     "mascotas": "cama juguete perro gato",
     "juguetes": "juguete didactico lego",
@@ -324,6 +324,10 @@ def _is_blocked_product(norm_title: str, interests: list, recipient: str, store_
         return True
     if "lectura" not in interest_set and re.search(r"\b(libro|novela|cuento|enciclopedia)\b", norm_title):
         return True
+    # Evitar homónimos de "aros" (flotadores de piscina, bicicletas aro 26, aros de luz, etc.) en Moda
+    if "moda" in interest_set and not (interest_set & {"deporte", "juguetes", "hogar"}):
+        if re.search(r"\b(flotador\w*|inflable\w*|piscina\w*|bestway|intex|colchoneta\w*|bicicleta\w*|neumatico\w*|llanta\w*|basquet\w*|tripode\w*|aro de luz|aro \d{2}|cortina\w*|ducha)\b", norm_title):
+            return True
 
     # 3. Bloquear juguetes infantiles cuando el destinatario NO es niño/bebé/adolescente
     # y el usuario NO pidió explícitamente intereses de juguetes o bebés
