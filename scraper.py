@@ -17,6 +17,7 @@ Incluye:
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
+import html as html_lib
 import json
 import re
 import unicodedata
@@ -476,7 +477,7 @@ def scrape_falabella(query: str, min_price: int, max_price: int, interests: list
             "matchedTerms": matched_terms,
             "keywords": normalize_text(full_title).split(),
         })
-        if len(items) >= 8:
+        if len(items) >= 15:
             break
     return items
 
@@ -542,7 +543,7 @@ def scrape_ripley(query: str, min_price: int, max_price: int, interests: list, r
             "matchedTerms": matched_terms,
             "keywords": normalize_text(full_title).split(),
         })
-        if len(items) >= 8:
+        if len(items) >= 15:
             break
     return items
 
@@ -610,7 +611,71 @@ def scrape_paris(query: str, min_price: int, max_price: int, interests: list, re
             "matchedTerms": matched_terms,
             "keywords": normalize_text(full_title).split(),
         })
-        if len(items) >= 8:
+        if len(items) >= 15:
+            break
+    return items
+
+
+def scrape_abc(query: str, min_price: int, max_price: int, interests: list, reference: str, recipient: str):
+    """Extrae productos e imágenes reales desde abc.cl (fusión de Abcdin y La Polar)."""
+    q = urllib.parse.quote(query)
+    raw_html = _fetch_html(f"https://www.abc.cl/busqueda?q={q}")
+    parts = re.split(r'<div[^>]+class="[^"]*product-tile[^"]*"[^>]+data-pid="', raw_html)
+    items = []
+    for chunk in parts[1:36]:
+        # Extraer JSON de data-gtm (ImpressionsUpdate)
+        gtm_match = re.search(r'data-gtm="([^"]*ImpressionsUpdate[^"]*)"', chunk)
+        title = ""
+        brand = ""
+        price = 0
+        if gtm_match:
+            try:
+                gtm = json.loads(html_lib.unescape(gtm_match.group(1)))
+                imp = gtm.get("ecommerce", {}).get("impressions") or {}
+                if isinstance(imp, list) and imp:
+                    imp = imp[0]
+                title = html_lib.unescape(str(imp.get("name") or "")).strip()
+                brand = html_lib.unescape(str(imp.get("brand") or "")).strip()
+                price = _parse_clp(imp.get("price"))
+            except Exception:
+                pass
+
+        img_match = re.search(r'<img[^>]+class="[^"]*tile-image[^"]*"[^>]+src="([^"]+)"', chunk)
+        if not img_match:
+            img_match = re.search(r'src="(https://www\.abc\.cl/dw/image/[^"]+)"', chunk)
+        img = _ensure_https(html_lib.unescape(img_match.group(1))) if img_match else ""
+
+        link_match = re.search(r'<a[^>]+class="[^"]*image-link[^"]*"[^>]+href="([^"]+)"', chunk)
+        prod_url = html_lib.unescape(link_match.group(1)) if link_match else f"/busqueda?q={q}"
+        if prod_url.startswith("/"):
+            prod_url = "https://www.abc.cl" + prod_url
+
+        if not title or not img:
+            continue
+
+        full_title = f"{brand} {title}".strip() if (brand and brand.lower() not in title.lower()) else title
+        relevant, matched_terms = is_product_relevant(full_title, interests, reference, recipient, "abc")
+        if not relevant:
+            continue
+        if not _price_acceptable(price, min_price, max_price):
+            continue
+
+        items.append({
+            "id": _make_id("abc", full_title, prod_url),
+            "title": full_title,
+            "storeId": "abc",
+            "price": price,
+            "oldPrice": None,
+            "rating": 4.6,
+            "reviews": 24,
+            "image": img,
+            "bg": "#ffffff",
+            "url": prod_url,
+            "interests": _detect_interests_from_title(full_title, interests),
+            "matchedTerms": matched_terms,
+            "keywords": normalize_text(full_title).split(),
+        })
+        if len(items) >= 15:
             break
     return items
 
@@ -675,22 +740,16 @@ def scrape_cencosud_supermarket(store_id: str, domain: str, query: str, min_pric
             "matchedTerms": matched_terms,
             "keywords": normalize_text(title).split(),
         })
-        if len(items) >= 6:
+        if len(items) >= 8:
             break
     return items
 
 
-def scrape_chilean_stores(interests: list, reference: str, budget_min: int, budget_max: int, stores: list, recipient: str = "cualquiera"):
-    """
-    Ejecuta scraping real en paralelo en las principales tiendas de Chile
-    con limpieza semántica, exclusión de alimentos no regalables y filtro de edad.
-    """
-    query = build_search_query(interests, reference)
-    all_items = []
+def _run_batch(query: str, budget_min: int, budget_max: int, interests: list, reference: str, stores: list, recipient: str):
+    batch_items = []
     statuses = {}
-
     tasks = {}
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=7) as executor:
         for sid in stores:
             if sid == "falabella":
                 tasks[executor.submit(scrape_falabella, query, budget_min, budget_max, interests, reference, recipient)] = sid
@@ -698,6 +757,8 @@ def scrape_chilean_stores(interests: list, reference: str, budget_min: int, budg
                 tasks[executor.submit(scrape_ripley, query, budget_min, budget_max, interests, reference, recipient)] = sid
             elif sid == "paris":
                 tasks[executor.submit(scrape_paris, query, budget_min, budget_max, interests, reference, recipient)] = sid
+            elif sid == "abc":
+                tasks[executor.submit(scrape_abc, query, budget_min, budget_max, interests, reference, recipient)] = sid
             elif sid == "jumbo":
                 tasks[executor.submit(scrape_cencosud_supermarket, "jumbo", "www.jumbo.cl", query, budget_min, budget_max, interests, reference, recipient)] = sid
             elif sid == "santaisabel":
@@ -709,13 +770,56 @@ def scrape_chilean_stores(interests: list, reference: str, budget_min: int, budg
             sid = tasks[fut]
             try:
                 res = fut.result()
-                all_items.extend(res)
+                batch_items.extend(res)
                 statuses[sid] = {"ok": True, "liveCount": len(res), "mode": "live" if res else "catalog_fallback"}
             except Exception as exc:
                 statuses[sid] = {"ok": False, "liveCount": 0, "mode": "catalog_fallback", "reason": str(exc)[:90]}
+    return batch_items, statuses
+
+
+def scrape_chilean_stores(interests: list, reference: str, budget_min: int, budget_max: int, stores: list, recipient: str = "cualquiera"):
+    """
+    Ejecuta scraping real en paralelo en Falabella, Ripley, Paris, Abcdin/La Polar (abc),
+    Jumbo y Santa Isabel. Si la búsqueda principal devuelve menos de 12 productos válidos,
+    ejecuta automáticamente una segunda búsqueda complementaria por interés principal.
+    """
+    query = build_search_query(interests, reference)
+    all_items, statuses = _run_batch(query, budget_min, budget_max, interests, reference, stores, recipient)
+
+    # Deduplicar resultados iniciales
+    seen = set()
+    unique_items = []
+    for it in all_items:
+        key = (it["storeId"], normalize_text(it["title"]))
+        if key not in seen:
+            seen.add(key)
+            unique_items.append(it)
+
+    # Segunda búsqueda complementaria automática si salieron menos de 12 resultados
+    complementary_query = None
+    if len(unique_items) < 12 and interests:
+        fallback_q = INTEREST_QUERY_MAP.get(interests[0])
+        if fallback_q and normalize_text(fallback_q) != normalize_text(query):
+            complementary_query = fallback_q
+            # Usar las tiendas más rápidas y confiables para la búsqueda complementaria
+            comp_stores = [s for s in stores if s in ("falabella", "paris", "abc", "ripley")]
+            extra_items, extra_statuses = _run_batch(
+                complementary_query, budget_min, budget_max, interests, "", comp_stores, recipient
+            )
+            for it in extra_items:
+                key = (it["storeId"], normalize_text(it["title"]))
+                if key not in seen:
+                    seen.add(key)
+                    unique_items.append(it)
+            for sid, st in extra_statuses.items():
+                if sid in statuses:
+                    statuses[sid]["liveCount"] = statuses[sid].get("liveCount", 0) + st.get("liveCount", 0)
+                    if statuses[sid]["liveCount"] > 0:
+                        statuses[sid]["mode"] = "live"
 
     return {
         "query": query,
-        "items": all_items,
+        "complementaryQuery": complementary_query,
+        "items": unique_items,
         "storeStatuses": statuses,
     }

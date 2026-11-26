@@ -630,7 +630,7 @@
     }
 
     state.currentResults = [...top3, ...remaining];
-    state.visibleMoreCount = 6;
+    state.visibleMoreCount = 9;
 
     loader.classList.add('hidden');
     renderResults(liveItems.length);
@@ -1003,7 +1003,7 @@
     });
 
     $('btn-load-more').addEventListener('click', () => {
-      state.visibleMoreCount += 6;
+      state.visibleMoreCount += 12;
       renderResults();
     });
 

@@ -7,6 +7,7 @@ window.REGALACL_STORES = [
   { id: 'falabella', name: 'Falabella', cls: 'store-falabella', searchBase: 'https://www.falabella.com/falabella-cl/search?Ntt=' },
   { id: 'ripley', name: 'Ripley', cls: 'store-ripley', searchBase: 'https://simple.ripley.cl/search/' },
   { id: 'paris', name: 'Paris', cls: 'store-paris', searchBase: 'https://www.paris.cl/search?q=' },
+  { id: 'abc', name: 'Abcdin / La Polar', cls: 'store-abc', searchBase: 'https://www.abc.cl/busqueda?q=' },
   { id: 'lider', name: 'Líder / Walmart', cls: 'store-lider', searchBase: 'https://www.lider.cl/catalogo/search?query=' },
   { id: 'jumbo', name: 'Jumbo', cls: 'store-jumbo', searchBase: 'https://www.jumbo.cl/busqueda?ft=' },
   { id: 'santaisabel', name: 'Santa Isabel', cls: 'store-santaisabel', searchBase: 'https://www.santaisabel.cl/busqueda?ft=' },
