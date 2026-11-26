@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es-CL">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RegalaCL — Recomendador Inteligente de Regalos en Chile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Top Navigation -->
+  <header class="navbar">
+    <div class="container navbar-inner">
+      <a href="#" class="brand" id="nav-home">
+        <span class="brand-icon" aria-hidden="true">🎁</span>
+        <span class="brand-text">Regala<strong>CL</strong></span>
+        <span class="brand-badge">Demo v1</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Navegación principal">
+        <button type="button" class="nav-btn active" data-view="finder" id="btn-view-finder">
+          Buscar regalos
+        </button>
+        <button type="button" class="nav-btn" data-view="saved" id="btn-view-saved">
+          Mis guardados <span class="count-pill" id="saved-count-pill">0</span>
+        </button>
+      </nav>
+
+      <div class="nav-auth" id="nav-auth-area">
+        <!-- Rendered by app.js -->
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- VIEW: FINDER -->
+    <section id="view-finder" class="view-section">
+      <!-- Hero -->
+      <div class="hero">
+        <div class="container hero-inner">
+          <div class="hero-copy">
+            <span class="eyebrow">Buscador multi-tienda en Chile</span>
+            <h1>Encuentra el regalo perfecto en minutos</h1>
+            <p>
+              Cuéntanos los intereses, tu presupuesto y cualquier pista sobre la persona.
+              Comparamos opciones en <strong>Falabella, Ripley, Paris, Líder, Jumbo, Santa Isabel</strong> y más tiendas de Chile para darte un <strong>Top 3 personalizado</strong> y decenas de ideas extra.
+            </p>
+            <div class="store-marquee" aria-label="Tiendas monitoreadas">
+              <span class="store-chip store-falabella">Falabella</span>
+              <span class="store-chip store-ripley">Ripley</span>
+              <span class="store-chip store-paris">Paris</span>
+              <span class="store-chip store-lider">Líder / Walmart</span>
+              <span class="store-chip store-jumbo">Jumbo</span>
+              <span class="store-chip store-santaisabel">Santa Isabel</span>
+              <span class="store-chip store-mercadolibre">MercadoLibre</span>
+              <span class="store-chip store-casaideas">Casaideas</span>
+              <span class="store-chip store-pcfactory">PC Factory</span>
+            </div>
+          </div>
+          <div class="scraper-status-card" id="scraper-status-card">
+            <div class="status-dot" id="backend-status-dot"></div>
+            <div>
+              <strong id="backend-status-title">Modo Demo Interactivo</strong>
+              <p id="backend-status-desc">Catálogo chileno de prueba activo. Si inicias <code>server.py</code>, se activa el scraping en vivo automáticamente.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Finder Form Card -->
+      <div class="container">
+        <form id="gift-finder-form" class="finder-card" novalidate>
+          <!-- Step 1: Interests -->
+          <div class="form-block">
+            <div class="block-header">
+              <span class="step-num">1</span>
+              <div>
+                <h2>¿Cuáles son sus intereses?</h2>
+                <p>Selecciona uno o más temas que le apasionen.</p>
+              </div>
+            </div>
+            <div class="chips-grid" id="interests-container" role="group" aria-label="Intereses"></div>
+          </div>
+
+          <!-- Step 2: Budget & Recipient -->
+          <div class="form-row-2">
+            <div class="form-block">
+              <div class="block-header">
+                <span class="step-num">2</span>
+                <div>
+                  <h2>Presupuesto aproximado (CLP)</h2>
+                  <p>Elige un rango rápido o ingresa tus propios montos.</p>
+                </div>
+              </div>
+
+              <div class="preset-row" id="budget-presets">
+                <button type="button" class="preset-btn active" data-min="0" data-max="20000">Hasta $20.000</button>
+                <button type="button" class="preset-btn" data-min="15000" data-max="50000">$15.000 – $50.000</button>
+                <button type="button" class="preset-btn" data-min="45000" data-max="100000">$45.000 – $100.000</button>
+                <button type="button" class="preset-btn" data-min="90000" data-max="250000">$90.000 – $250.000</button>
+                <button type="button" class="preset-btn" data-min="0" data-max="500000">Sin límite</button>
+              </div>
+
+              <div class="budget-inputs">
+                <label class="field-group">
+                  <span>Mínimo ($)</span>
+                  <input type="number" id="budget-min" min="0" max="1000000" step="5000" value="0" />
+                </label>
+                <span class="budget-sep">a</span>
+                <label class="field-group">
+                  <span>Máximo ($)</span>
+                  <input type="number" id="budget-max" min="5000" max="2000000" step="5000" value="20000" />
+                </label>
+              </div>
+            </div>
+
+            <div class="form-block">
+              <div class="block-header">
+                <span class="step-num">3</span>
+                <div>
+                  <h2>¿Para quién y qué ocasión?</h2>
+                  <p>Nos ayuda a afinar el estilo del regalo.</p>
+                </div>
+              </div>
+              <div class="select-grid">
+                <label class="field-group">
+                  <span>Destinatario</span>
+                  <select id="recipient-select">
+                    <option value="cualquiera">Cualquier persona</option>
+                    <option value="pareja">Pareja</option>
+                    <option value="mama">Mamá</option>
+                    <option value="papa">Papá</option>
+                    <option value="familia">Familia</option>
+                    <option value="amigo">Amigo</option>
+                    <option value="amiga">Amiga</option>
+                    <option value="colega">Colega</option>
+                    <option value="bebe_0_2">Bebé (0 a 2 años)</option>
+                    <option value="nino_3_4">Niño/a (3 a 4 años)</option>
+                    <option value="nino">Niño / Niña</option>
+                    <option value="adolescente">Adolescente</option>
+                  </select>
+                </label>
+                <label class="field-group">
+                  <span>Ocasión</span>
+                  <select id="occasion-select">
+                    <option value="cualquiera">Cualquier ocasión</option>
+                    <option value="cumpleanos">Cumpleaños</option>
+                    <option value="navidad">Navidad</option>
+                    <option value="amigo_secreto">Amigo Secreto</option>
+                    <option value="aniversario">Aniversario</option>
+                    <option value="romantico">Romántico</option>
+                    <option value="agradecimiento">Agradecimiento</option>
+                    <option value="detalle">Detalle</option>
+                    <option value="hogar">Casa nueva / Inauguración</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Free-text references & Store filter -->
+          <div class="form-row-2">
+            <div class="form-block">
+              <div class="block-header">
+                <span class="step-num">4</span>
+                <div>
+                  <h2>Referencias o pistas (opcional)</h2>
+                  <p>Escribe palabras clave, marcas o ideas que tengas en mente.</p>
+                </div>
+              </div>
+              <textarea
+                id="reference-input"
+                rows="3"
+                placeholder="Ej: Le encanta el café de grano, hacer trekking en el sur, escuchar música con audífonos bluetooth o cocinar en freidora de aire..."
+              ></textarea>
+            </div>
+
+            <div class="form-block">
+              <div class="block-header">
+                <span class="step-num">5</span>
+                <div>
+                  <h2>Tiendas de Chile a consultar</h2>
+                  <p>Por defecto buscamos en todas las grandes tiendas.</p>
+                </div>
+              </div>
+              <div class="store-filter-grid" id="store-filters"></div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary btn-lg" id="btn-search">
+              <span class="btn-icon">🔎</span> Buscar recomendaciones en tiendas de Chile
+            </button>
+            <button type="button" class="btn-ghost" id="btn-reset">
+              Limpiar filtros
+            </button>
+          </div>
+        </form>
+
+        <!-- Scraping Progress Banner -->
+        <div id="scraping-loader" class="scraping-loader hidden" role="status" aria-live="polite">
+          <div class="spinner"></div>
+          <div class="scraping-loader-text">
+            <strong>Buscando y comparando precios en tiendas de Chile...</strong>
+            <div class="scraping-stores-progress" id="scraping-stores-progress"></div>
+          </div>
+        </div>
+
+        <!-- Results Area -->
+        <div id="results-section" class="results-section hidden">
+          <div class="results-header">
+            <div>
+              <span class="eyebrow">Resultados personalizados</span>
+              <h2 id="results-title">Tu Top 3 de Regalos Recomendados</h2>
+              <p id="results-subtitle" class="muted"></p>
+            </div>
+            <div class="results-meta-actions">
+              <button type="button" class="btn-secondary btn-sm" id="btn-save-search">
+                📌 Guardar esta búsqueda
+              </button>
+            </div>
+          </div>
+
+          <!-- TOP 3 PODIUM -->
+          <div id="top3-grid" class="top3-grid"></div>
+
+          <!-- MORE SUGGESTIONS -->
+          <div class="more-section" id="more-section">
+            <div class="more-header">
+              <div>
+                <h3>Más sugerencias para ti</h3>
+                <p class="muted" id="more-count-label">Otras excelentes alternativas encontradas en tiendas de Chile</p>
+              </div>
+              <div class="sort-controls">
+                <label for="sort-select">Ordenar por:</label>
+                <select id="sort-select">
+                  <option value="score">Mejor coincidencia</option>
+                  <option value="price-asc">Menor precio</option>
+                  <option value="price-desc">Mayor precio</option>
+                  <option value="rating">Mejor evaluados</option>
+                </select>
+              </div>
+            </div>
+            <div id="more-grid" class="more-grid"></div>
+            <div class="load-more-wrap">
+              <button type="button" class="btn-secondary hidden" id="btn-load-more">
+                Ver más sugerencias
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW: SAVED & ACCOUNT -->
+    <section id="view-saved" class="view-section hidden">
+      <div class="container saved-container">
+        <div class="saved-header">
+          <div>
+            <span class="eyebrow">Mi Espacio Personal</span>
+            <h2>Mis Regalos Guardados</h2>
+            <p class="muted" id="saved-subtitle">Administra tus ideas favoritas y revisa tus búsquedas anteriores.</p>
+          </div>
+          <div class="saved-header-actions" id="saved-header-actions"></div>
+        </div>
+
+        <!-- Gate if not logged in -->
+        <div id="saved-auth-gate" class="empty-state hidden">
+          <div class="empty-icon">🔐</div>
+          <h3>Inicia sesión o crea tu cuenta gratis</h3>
+          <p>Guarda tus regalos favoritos, agrégales notas por persona y conserva tu historial de recomendaciones desde cualquier sesión.</p>
+          <div class="empty-actions">
+            <button type="button" class="btn-primary" id="btn-gate-register">Crear cuenta</button>
+            <button type="button" class="btn-secondary" id="btn-gate-login">Iniciar sesión</button>
+            <button type="button" class="btn-ghost" id="btn-gate-demo">Probar con cuenta demo</button>
+          </div>
+        </div>
+
+        <!-- Logged-in content -->
+        <div id="saved-content" class="hidden">
+          <div class="saved-tabs">
+            <button type="button" class="tab-btn active" data-tab="gifts">🎁 Regalos guardados (<span id="tab-gifts-count">0</span>)</button>
+            <button type="button" class="tab-btn" data-tab="searches">🕒 Historial de búsquedas (<span id="tab-searches-count">0</span>)</button>
+          </div>
+
+          <div id="saved-gifts-panel">
+            <div id="saved-gifts-grid" class="more-grid"></div>
+            <div id="saved-gifts-empty" class="empty-state hidden">
+              <div class="empty-icon">💛</div>
+              <h3>Aún no has guardado regalos</h3>
+              <p>Explora recomendaciones y haz clic en "Guardar" en cualquier producto para tenerlo siempre a mano.</p>
+              <button type="button" class="btn-primary" id="btn-go-find">Ir a buscar regalos</button>
+            </div>
+          </div>
+
+          <div id="saved-searches-panel" class="hidden">
+            <div id="saved-searches-list" class="searches-list"></div>
+            <div id="saved-searches-empty" class="empty-state hidden">
+              <div class="empty-icon">🧭</div>
+              <h3>Sin búsquedas guardadas todavía</h3>
+              <p>Cuando hagas una búsqueda, presiona "Guardar esta búsqueda" para volver a consultarla en un clic.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <p><strong>RegalaCL</strong> — Prototipo interactivo de recomendación de regalos en tiendas de Chile.</p>
+      <p class="muted">Los precios y disponibilidad en tiendas externas (Falabella, Ripley, Paris, Líder, Jumbo, Santa Isabel, etc.) son referenciales y se confirman directamente en cada comercio.</p>
+    </div>
+  </footer>
+
+  <!-- Auth Modal -->
+  <div id="auth-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+    <div class="modal-card">
+      <button type="button" class="modal-close" id="auth-modal-close" aria-label="Cerrar">&times;</button>
+      <div class="modal-tabs">
+        <button type="button" class="modal-tab active" data-auth-mode="login">Iniciar sesión</button>
+        <button type="button" class="modal-tab" data-auth-mode="register">Crear cuenta</button>
+      </div>
+
+      <h3 id="auth-modal-title">Bienvenido de vuelta</h3>
+      <p class="muted modal-desc" id="auth-modal-desc">Ingresa para acceder a tus regalos guardados.</p>
+
+      <form id="auth-form">
+        <label class="field-group hidden" id="auth-name-group">
+          <span>Nombre</span>
+          <input type="text" id="auth-name" placeholder="Ej: Camila Rojas" autocomplete="name" />
+        </label>
+        <label class="field-group">
+          <span>Correo electrónico</span>
+          <input type="email" id="auth-email" placeholder="tu@correo.cl" required autocomplete="email" />
+        </label>
+        <label class="field-group">
+          <span>Contraseña</span>
+          <input type="password" id="auth-password" placeholder="Mínimo 4 caracteres" required minlength="4" autocomplete="current-password" />
+        </label>
+        <p class="form-error hidden" id="auth-error"></p>
+        <button type="submit" class="btn-primary btn-full" id="auth-submit-btn">Iniciar sesión</button>
+      </form>
+
+      <div class="modal-divider"><span>o prueba rápido</span></div>
+      <button type="button" class="btn-secondary btn-full" id="auth-demo-btn">
+        ⚡ Entrar con cuenta demo (demo@regalacl.cl)
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="data/catalog.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

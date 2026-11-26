@@ -1,0 +1,7 @@
+# Base de datos local y archivos temporales de Python
+regalacl.db
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
