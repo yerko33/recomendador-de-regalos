@@ -397,10 +397,14 @@ def is_product_relevant(title: str, interests: list, reference: str, recipient: 
     return len(matched) > 0, matched[:4]
 
 
+MAX_HTML_BYTES = 6 * 1024 * 1024  # 6 MB cap por respuesta HTML de tienda
+SUPPORTED_LIVE_STORES = ("falabella", "ripley", "paris", "abc", "jumbo", "santaisabel")
+
+
 def _fetch_html(url: str, timeout: float = 8.0) -> str:
     req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read().decode("utf-8", errors="ignore")
+        return resp.read(MAX_HTML_BYTES).decode("utf-8", errors="ignore")
 
 
 def _make_id(store_id: str, title: str, url: str = "") -> str:
@@ -774,8 +778,16 @@ def _run_batch(query: str, budget_min: int, budget_max: int, interests: list, re
     batch_items = []
     statuses = {}
     tasks = {}
-    with ThreadPoolExecutor(max_workers=7) as executor:
-        for sid in stores:
+    # Deduplicar y restringir a tiendas válidas (evita amplificación de requests salientes)
+    unique_stores = []
+    for sid in (stores or []):
+        if isinstance(sid, str) and sid not in unique_stores:
+            unique_stores.append(sid)
+        if len(unique_stores) >= 12:
+            break
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        for sid in unique_stores:
             if sid == "falabella":
                 tasks[executor.submit(scrape_falabella, query, budget_min, budget_max, interests, reference, recipient)] = sid
             elif sid == "ripley":
@@ -797,8 +809,8 @@ def _run_batch(query: str, budget_min: int, budget_max: int, interests: list, re
                 res = fut.result()
                 batch_items.extend(res)
                 statuses[sid] = {"ok": True, "liveCount": len(res), "mode": "live" if res else "catalog_fallback"}
-            except Exception as exc:
-                statuses[sid] = {"ok": False, "liveCount": 0, "mode": "catalog_fallback", "reason": str(exc)[:90]}
+            except Exception:
+                statuses[sid] = {"ok": False, "liveCount": 0, "mode": "catalog_fallback", "reason": "store_unavailable"}
     return batch_items, statuses
 
 
@@ -808,8 +820,10 @@ def scrape_chilean_stores(interests: list, reference: str, budget_min: int, budg
     Jumbo y Santa Isabel. Si la búsqueda principal devuelve menos de 12 productos válidos,
     ejecuta automáticamente una segunda búsqueda complementaria por interés principal.
     """
-    query = build_search_query(interests, reference)
-    all_items, statuses = _run_batch(query, budget_min, budget_max, interests, reference, stores, recipient)
+    clean_interests = [str(i)[:30] for i in (interests or [])[:10]]
+    clean_reference = str(reference or "")[:200]
+    query = build_search_query(clean_interests, clean_reference)
+    all_items, statuses = _run_batch(query, budget_min, budget_max, clean_interests, clean_reference, stores, recipient)
 
     # Deduplicar resultados iniciales
     seen = set()

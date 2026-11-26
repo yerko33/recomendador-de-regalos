@@ -31,6 +31,60 @@
 
   const $ = (id) => document.getElementById(id);
 
+  function escapeHTML(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function sanitizeHttpUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return '#';
+    try {
+      const parsed = new URL(rawUrl, window.location.origin);
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        return parsed.href;
+      }
+    } catch {
+      // invalid URL
+    }
+    return '#';
+  }
+
+  function sanitizeBgColor(rawColor) {
+    if (typeof rawColor === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(rawColor.trim())) {
+      return rawColor.trim();
+    }
+    return '#f3efe9';
+  }
+
+  async function hashLocalPassword(password, salt) {
+    const useSalt = salt || Array.from(crypto.getRandomValues(new Uint8Array(12)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    if (window.crypto && window.crypto.subtle) {
+      const data = new TextEncoder().encode(useSalt + ':' + password);
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      return `sha256$${useSalt}$${hex}`;
+    }
+    return `plain$${useSalt}$${password}`;
+  }
+
+  async function verifyLocalPassword(password, storedRecord) {
+    if (!storedRecord) return false;
+    if (storedRecord.passwordHash && storedRecord.passwordHash.startsWith('sha256$')) {
+      const parts = storedRecord.passwordHash.split('$');
+      if (parts.length === 3) {
+        const computed = await hashLocalPassword(password, parts[1]);
+        return computed === storedRecord.passwordHash;
+      }
+    }
+    // Compatibilidad con cuentas demo previas
+    return typeof storedRecord.password === 'string' && storedRecord.password === password;
+  }
+
   function formatCLP(amount) {
     return '$' + Math.round(amount).toLocaleString('es-CL');
   }
@@ -55,13 +109,13 @@
   }
 
   function buildStoreUrl(item) {
-    if (item.url) return item.url;
+    if (item.url) return sanitizeHttpUrl(item.url);
     const store = getStoreById(item.storeId);
     const q = encodeURIComponent(item.title);
     if (store.id === 'mercadolibre' || store.id === 'ripley') {
-      return store.searchBase + encodeURIComponent(item.title.replace(/\s+/g, '-'));
+      return sanitizeHttpUrl(store.searchBase + encodeURIComponent(item.title.replace(/\s+/g, '-')));
     }
-    return store.searchBase + q;
+    return sanitizeHttpUrl(store.searchBase + q);
   }
 
   let toastTimer = null;
@@ -181,8 +235,11 @@
     const errEl = $('auth-error');
     errEl.classList.add('hidden');
 
-    if (!email || password.length < 4) {
-      errEl.textContent = 'Ingresa un correo válido y una contraseña de al menos 4 caracteres.';
+    const minLen = state.authMode === 'register' ? 8 : 4;
+    if (!email || password.length < minLen) {
+      errEl.textContent = state.authMode === 'register'
+        ? 'Ingresa un correo válido y una contraseña de al menos 8 caracteres.'
+        : 'Ingresa un correo válido y una contraseña de al menos 4 caracteres.';
       errEl.classList.remove('hidden');
       return;
     }
@@ -217,10 +274,11 @@
         errEl.classList.remove('hidden');
         return;
       }
+      const passwordHash = await hashLocalPassword(password);
       users[email] = {
         name: name || email.split('@')[0],
         email,
-        password,
+        passwordHash,
         savedGifts: [],
         savedSearches: []
       };
@@ -228,10 +286,17 @@
       state.user = { ...users[email] };
     } else {
       const existing = users[email];
-      if (!existing || existing.password !== password) {
+      const ok = await verifyLocalPassword(password, existing);
+      if (!existing || !ok) {
         errEl.textContent = 'Correo o contraseña incorrectos.';
         errEl.classList.remove('hidden');
         return;
+      }
+      // Migrar contraseñas antiguas en texto plano a hash con salt
+      if (existing.password && !existing.passwordHash) {
+        existing.passwordHash = await hashLocalPassword(password);
+        delete existing.password;
+        saveLocalUsers(users);
       }
       state.user = { ...existing };
     }
@@ -281,6 +346,12 @@
   }
 
   function logout() {
+    if (state.backendAuth && state.user && state.user.token) {
+      fetch('/api/logout', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + state.user.token }
+      }).catch(() => {});
+    }
     state.user = null;
     localStorage.removeItem(STORAGE_KEYS.SESSION);
     renderAuthNav();
@@ -644,28 +715,35 @@
   function createGiftCardHTML(item, rankIndex, options = {}) {
     const store = getStoreById(item.storeId);
     const saved = isSaved(item.id);
-    const url = buildStoreUrl(item);
+    const safeUrl = escapeHTML(buildStoreUrl(item));
+    const safeTitle = escapeHTML(item.title);
+    const safeStoreName = escapeHTML(store.name);
+    const safeStoreCls = escapeHTML(store.cls);
+    const safeId = escapeHTML(item.id);
+    const safeBg = sanitizeBgColor(item.bg);
+    const safeEmoji = escapeHTML(item.emoji || '🎁');
+    const safeImgUrl = item.image ? sanitizeHttpUrl(item.image) : '';
 
     let rankBanner = '';
     let rankClass = '';
     if (rankIndex === 0) {
       rankClass = 'rank-1';
-      rankBanner = `<div class="rank-banner"><span>🥇 #1 Mejor Recomendación</span><span class="match-badge">${item.matchPct || 95}% Match</span></div>`;
+      rankBanner = `<div class="rank-banner"><span>🥇 #1 Mejor Recomendación</span><span class="match-badge">${Number(item.matchPct) || 95}% Match</span></div>`;
     } else if (rankIndex === 1) {
       rankClass = 'rank-2';
-      rankBanner = `<div class="rank-banner"><span>🥈 #2 Excelente Alternativa</span><span class="match-badge">${item.matchPct || 91}% Match</span></div>`;
+      rankBanner = `<div class="rank-banner"><span>🥈 #2 Excelente Alternativa</span><span class="match-badge">${Number(item.matchPct) || 91}% Match</span></div>`;
     } else if (rankIndex === 2) {
       rankClass = 'rank-3';
-      rankBanner = `<div class="rank-banner"><span>🥉 #3 Top Selección</span><span class="match-badge">${item.matchPct || 88}% Match</span></div>`;
+      rankBanner = `<div class="rank-banner"><span>🥉 #3 Top Selección</span><span class="match-badge">${Number(item.matchPct) || 88}% Match</span></div>`;
     }
 
-    const visualContent = item.image
-      ? `<img src="${item.image}" alt="${item.title.replace(/"/g, '&quot;')}" class="gift-visual-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block';" /><span class="gift-visual-emoji" aria-hidden="true" style="display:none">${item.emoji || '🎁'}</span>`
-      : `<span class="gift-visual-emoji" aria-hidden="true">${item.emoji || '🎁'}</span>`;
+    const visualContent = safeImgUrl && safeImgUrl !== '#'
+      ? `<img src="${escapeHTML(safeImgUrl)}" alt="${safeTitle}" class="gift-visual-img" loading="lazy" referrerpolicy="no-referrer" /><span class="gift-visual-emoji" aria-hidden="true" style="display:none">${safeEmoji}</span>`
+      : `<span class="gift-visual-emoji" aria-hidden="true">${safeEmoji}</span>`;
 
     const interestTags = (item.interests || []).slice(0, 3).map(id => {
       const obj = INTERESTS.find(i => i.id === id);
-      return obj ? `<span class="gift-tag">${obj.icon} ${obj.label}</span>` : '';
+      return obj ? `<span class="gift-tag">${escapeHTML(obj.icon)} ${escapeHTML(obj.label)}</span>` : '';
     }).join('');
 
     const sourceTag = item.source === 'live'
@@ -674,36 +752,36 @@
 
     const noteSection = options.showNote
       ? `<div class="saved-note-box">
-           <input type="text" class="saved-note-input" data-note-id="${item.id}" value="${(item.note || '').replace(/"/g, '&quot;')}" placeholder="Agregar nota (ej: Para mamá)..." />
-           <button type="button" class="btn-secondary btn-sm" data-save-note="${item.id}">OK</button>
+           <input type="text" class="saved-note-input" data-note-id="${safeId}" value="${escapeHTML(item.note || '')}" placeholder="Agregar nota (ej: Para mamá)..." />
+           <button type="button" class="btn-secondary btn-sm" data-save-note="${safeId}">OK</button>
          </div>`
       : '';
 
     return `
       <article class="gift-card ${rankClass}">
         ${rankBanner}
-        <div class="gift-visual" style="background:${item.bg || '#f3efe9'}">
-          <span class="gift-store-badge ${store.cls}">${store.name}</span>
+        <div class="gift-visual" style="background:${safeBg}">
+          <span class="gift-store-badge ${safeStoreCls}">${safeStoreName}</span>
           ${visualContent}
           ${sourceTag}
         </div>
         <div class="gift-body">
-          <h4 class="gift-title">${item.title}</h4>
+          <h4 class="gift-title">${safeTitle}</h4>
           <div class="gift-price-row">
             <div>
               <span class="gift-price">${formatCLP(item.price)}</span>
               ${item.oldPrice && item.oldPrice > item.price ? `<span class="gift-old-price">${formatCLP(item.oldPrice)}</span>` : ''}
             </div>
-            <span class="gift-rating">★ ${(item.rating || 4.7).toFixed(1)}</span>
+            <span class="gift-rating">★ ${(Number(item.rating) || 4.7).toFixed(1)}</span>
           </div>
-          ${item.reasonText ? `<div class="gift-reason">${item.reasonText}</div>` : ''}
+          ${item.reasonText ? `<div class="gift-reason">${escapeHTML(item.reasonText)}</div>` : ''}
           ${interestTags ? `<div class="gift-tags">${interestTags}</div>` : ''}
           ${noteSection}
           <div class="gift-actions">
-            <a href="${url}" target="_blank" rel="noopener noreferrer" class="btn-primary btn-sm">
-              Ver en ${store.name} ↗
+            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="btn-primary btn-sm">
+              Ver en ${safeStoreName} ↗
             </a>
-            <button type="button" class="btn-save ${saved ? 'saved' : ''}" data-toggle-save="${item.id}">
+            <button type="button" class="btn-save ${saved ? 'saved' : ''}" data-toggle-save="${safeId}">
               ${saved ? '❤️ Guardado' : '🤍 Guardar'}
             </button>
           </div>
@@ -749,6 +827,13 @@
   }
 
   function bindCardActions(container, sourceList) {
+    container.querySelectorAll('img.gift-visual-img').forEach(img => {
+      img.addEventListener('error', () => {
+        img.style.display = 'none';
+        if (img.nextElementSibling) img.nextElementSibling.style.display = 'inline-block';
+      });
+    });
+
     container.querySelectorAll('[data-toggle-save]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-toggle-save');
@@ -769,11 +854,12 @@
   function renderAuthNav() {
     const area = $('nav-auth-area');
     if (state.user) {
-      const initials = (state.user.name || 'U').slice(0, 2).toUpperCase();
+      const safeName = escapeHTML(state.user.name || 'Usuario');
+      const initials = escapeHTML((state.user.name || 'U').slice(0, 2).toUpperCase());
       area.innerHTML = `
         <div class="user-pill">
           <span class="user-avatar">${initials}</span>
-          <span>${state.user.name}</span>
+          <span>${safeName}</span>
         </div>
         <button type="button" class="btn-ghost btn-sm" id="btn-logout">Salir</button>
       `;
@@ -853,10 +939,10 @@
         return `
           <div class="search-history-item">
             <div>
-              <h4>${interestNames} · ${formatCLP(s.budgetMin)} – ${formatCLP(s.budgetMax)}</h4>
-              <p>${s.reference ? `"${s.reference}" · ` : ''}Guardada el ${dateStr}${s.topTitle ? ` · Top #1: ${s.topTitle}` : ''}</p>
+              <h4>${escapeHTML(interestNames)} · ${formatCLP(s.budgetMin)} – ${formatCLP(s.budgetMax)}</h4>
+              <p>${s.reference ? `"${escapeHTML(s.reference)}" · ` : ''}Guardada el ${escapeHTML(dateStr)}${s.topTitle ? ` · Top #1: ${escapeHTML(s.topTitle)}` : ''}</p>
             </div>
-            <button type="button" class="btn-secondary btn-sm" data-rerun-search="${s.id}">Repetir búsqueda</button>
+            <button type="button" class="btn-secondary btn-sm" data-rerun-search="${escapeHTML(s.id)}">Repetir búsqueda</button>
           </div>
         `;
       }).join('');
@@ -952,6 +1038,8 @@
     });
     const isReg = mode === 'register';
     $('auth-name-group').classList.toggle('hidden', !isReg);
+    $('auth-password').minLength = isReg ? 8 : 4;
+    $('auth-password').placeholder = isReg ? 'Mínimo 8 caracteres' : 'Tu contraseña';
     $('auth-modal-title').textContent = isReg ? 'Crea tu cuenta en RegalaCL' : 'Bienvenido de vuelta';
     $('auth-modal-desc').textContent = customDesc || (isReg
       ? 'Guarda tus recomendaciones favoritas y ten listas para cada ocasión.'

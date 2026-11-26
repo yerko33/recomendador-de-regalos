@@ -1,14 +1,16 @@
 """
 Servidor local para RegalaCL (sin dependencias externas — solo biblioteca estándar de Python 3).
 Incluye:
-- Servicio de archivos estáticos (index.html, styles.css, app.js, data/catalog.js)
-- Base de datos SQLite (regalacl.db) para cuentas de usuario, regalos guardados e historial de búsquedas
+- Lista blanca explícita de archivos estáticos (evita exponer regalacl.db, .git/ o código backend)
+- Base de datos SQLite (regalacl.db) con sesiones con expiración de 7 días y revocación en /api/logout
+- Límite de tamaño de cuerpo HTTP y cabeceras de seguridad
 - Endpoint /api/scrape conectado a scraper.py
 """
 
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import json
+import mimetypes
 import os
 import secrets
 import sqlite3
@@ -19,6 +21,16 @@ from scraper import scrape_chilean_stores
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "regalacl.db")
 PORT = int(os.environ.get("PORT", "8000"))
+MAX_BODY_BYTES = 16 * 1024  # 16 KB
+SESSION_TTL_DAYS = 7
+
+STATIC_ALLOWLIST = {
+    "/": "index.html",
+    "/index.html": "index.html",
+    "/styles.css": "styles.css",
+    "/app.js": "app.js",
+    "/data/catalog.js": os.path.join("data", "catalog.js"),
+}
 
 
 def get_db():
@@ -112,37 +124,79 @@ def serialize_user(conn, user_row):
     }
 
 
-class RegalaHandler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=BASE_DIR, **kwargs)
+class PayloadTooLargeError(Exception):
+    pass
+
+
+class InvalidJsonError(Exception):
+    pass
+
+
+class RegalaHandler(BaseHTTPRequestHandler):
+    def _send_security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
 
     def _send_json(self, status: int, payload: dict):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self._send_security_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static(self, rel_path: str):
+        full_path = os.path.join(BASE_DIR, rel_path)
+        if not os.path.isfile(full_path):
+            return self._send_json(404, {"error": "Archivo no encontrado"})
+        ctype, _ = mimetypes.guess_type(full_path)
+        with open(full_path, "rb") as f:
+            data = f.read()
+        self.send_response(200)
+        self._send_security_headers()
+        self.send_header("Content-Type", f"{ctype or 'application/octet-stream'}; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _read_json(self):
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            raise InvalidJsonError("Content-Length inválido")
+        if length < 0 or length > MAX_BODY_BYTES:
+            raise PayloadTooLargeError("Cuerpo demasiado grande")
         if length == 0:
             return {}
         raw = self.rfile.read(length).decode("utf-8", errors="ignore")
-        return json.loads(raw)
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            raise InvalidJsonError("JSON inválido")
+        if not isinstance(parsed, dict):
+            raise InvalidJsonError("Se esperaba un objeto JSON")
+        return parsed
 
-    def _get_auth_user(self, conn):
+    def _get_bearer_token(self):
         auth = self.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return None
-        token = auth[7:].strip()
+        return auth[7:].strip() or None
+
+    def _get_auth_user(self, conn):
+        token = self._get_bearer_token()
+        if not token:
+            return None
         return conn.execute(
             """
             SELECT u.* FROM users u
             JOIN sessions s ON s.user_id = u.id
             WHERE s.token = ?
+              AND s.created_at >= datetime('now', ?)
             """,
-            (token,),
+            (token, f"-{SESSION_TTL_DAYS} days"),
         ).fetchone()
 
     def do_GET(self):
@@ -157,18 +211,34 @@ class RegalaHandler(SimpleHTTPRequestHandler):
                     return self._send_json(401, {"error": "No autorizado"})
                 return self._send_json(200, {"user": serialize_user(conn, user)})
 
-        return super().do_GET()
+        if parsed.path in STATIC_ALLOWLIST:
+            return self._serve_static(STATIC_ALLOWLIST[parsed.path])
+
+        return self._send_json(404, {"error": "Ruta no encontrada"})
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        data = self._read_json()
+        try:
+            data = self._read_json()
+        except PayloadTooLargeError:
+            return self._send_json(413, {"error": "Solicitud demasiado grande."})
+        except InvalidJsonError:
+            return self._send_json(400, {"error": "JSON inválido."})
+
+        if parsed.path == "/api/logout":
+            token = self._get_bearer_token()
+            if token:
+                with get_db() as conn:
+                    conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+                    conn.commit()
+            return self._send_json(200, {"ok": True})
 
         if parsed.path == "/api/register":
-            name = (data.get("name") or "").strip()
-            email = (data.get("email") or "").strip().lower()
-            password = data.get("password") or ""
-            if not email or len(password) < 4:
-                return self._send_json(400, {"error": "Correo inválido o contraseña muy corta."})
+            name = str(data.get("name") or "").strip()[:80]
+            email = str(data.get("email") or "").strip().lower()[:120]
+            password = str(data.get("password") or "")
+            if not email or "@" not in email or len(password) < 8:
+                return self._send_json(400, {"error": "Correo inválido o contraseña menor a 8 caracteres."})
             with get_db() as conn:
                 try:
                     cur = conn.execute(
@@ -185,8 +255,8 @@ class RegalaHandler(SimpleHTTPRequestHandler):
                     return self._send_json(409, {"error": "Ya existe una cuenta con ese correo."})
 
         if parsed.path == "/api/login":
-            email = (data.get("email") or "").strip().lower()
-            password = data.get("password") or ""
+            email = str(data.get("email") or "").strip().lower()
+            password = str(data.get("password") or "")
             with get_db() as conn:
                 user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
                 if not user or not verify_password(password, user["password_hash"]):
@@ -202,7 +272,7 @@ class RegalaHandler(SimpleHTTPRequestHandler):
                 if not user:
                     return self._send_json(401, {"error": "Inicia sesión para guardar regalos."})
                 gift = data.get("gift") or {}
-                gid = gift.get("id")
+                gid = str(gift.get("id") or "")[:100]
                 if not gid:
                     return self._send_json(400, {"error": "Regalo inválido."})
                 conn.execute(
@@ -210,7 +280,7 @@ class RegalaHandler(SimpleHTTPRequestHandler):
                     INSERT OR REPLACE INTO saved_gifts (user_id, gift_id, gift_json, note)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (user["id"], gid, json.dumps(gift, ensure_ascii=False), gift.get("note", "")),
+                    (user["id"], gid, json.dumps(gift, ensure_ascii=False), str(gift.get("note", ""))[:300]),
                 )
                 conn.commit()
                 return self._send_json(200, {"ok": True})
@@ -229,15 +299,18 @@ class RegalaHandler(SimpleHTTPRequestHandler):
                 return self._send_json(200, {"ok": True})
 
         if parsed.path == "/api/scrape":
-            result = scrape_chilean_stores(
-                interests=data.get("interests") or [],
-                reference=data.get("reference") or "",
-                budget_min=int(data.get("budgetMin") or 0),
-                budget_max=int(data.get("budgetMax") or 500000),
-                stores=data.get("stores") or [],
-                recipient=data.get("recipient") or "cualquiera",
-            )
-            return self._send_json(200, result)
+            try:
+                result = scrape_chilean_stores(
+                    interests=data.get("interests") or [],
+                    reference=str(data.get("reference") or "")[:200],
+                    budget_min=max(0, int(data.get("budgetMin") or 0)),
+                    budget_max=min(5_000_000, max(1000, int(data.get("budgetMax") or 500000))),
+                    stores=data.get("stores") or [],
+                    recipient=str(data.get("recipient") or "cualquiera")[:40],
+                )
+                return self._send_json(200, result)
+            except Exception:
+                return self._send_json(500, {"error": "No se pudo completar la búsqueda.", "items": [], "storeStatuses": {}})
 
         return self._send_json(404, {"error": "Ruta no encontrada"})
 
@@ -245,14 +318,17 @@ class RegalaHandler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path.startswith("/api/saved-gifts/") and parsed.path.endswith("/note"):
             gift_id = urllib.parse.unquote(parsed.path[len("/api/saved-gifts/"):-len("/note")])
-            data = self._read_json()
+            try:
+                data = self._read_json()
+            except (PayloadTooLargeError, InvalidJsonError):
+                return self._send_json(400, {"error": "Solicitud inválida."})
             with get_db() as conn:
                 user = self._get_auth_user(conn)
                 if not user:
                     return self._send_json(401, {"error": "No autorizado"})
                 conn.execute(
                     "UPDATE saved_gifts SET note = ? WHERE user_id = ? AND gift_id = ?",
-                    (data.get("note", ""), user["id"], gift_id),
+                    (str(data.get("note", ""))[:300], user["id"], gift_id),
                 )
                 conn.commit()
                 return self._send_json(200, {"ok": True})

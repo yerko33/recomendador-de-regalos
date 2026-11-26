@@ -10,32 +10,46 @@ if ROOT_DIR not in sys.path:
 
 from scraper import scrape_chilean_stores
 
+MAX_BODY_BYTES = 16 * 1024  # 16 KB
+
 
 class handler(BaseHTTPRequestHandler):
+    def _send_json(self, status: int, payload: dict):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self):
         try:
-            length = int(self.headers.get("Content-Length", 0))
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                return self._send_json(400, {"error": "Solicitud inválida.", "items": [], "storeStatuses": {}})
+
+            if length < 0 or length > MAX_BODY_BYTES:
+                return self._send_json(413, {"error": "Solicitud demasiado grande.", "items": [], "storeStatuses": {}})
+
             raw = self.rfile.read(length).decode("utf-8", errors="ignore") if length else "{}"
-            data = json.loads(raw)
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                return self._send_json(400, {"error": "JSON inválido.", "items": [], "storeStatuses": {}})
+
+            if not isinstance(data, dict):
+                return self._send_json(400, {"error": "Formato inválido.", "items": [], "storeStatuses": {}})
 
             result = scrape_chilean_stores(
                 interests=data.get("interests") or [],
-                reference=data.get("reference") or "",
-                budget_min=int(data.get("budgetMin") or 0),
-                budget_max=int(data.get("budgetMax") or 500000),
+                reference=str(data.get("reference") or "")[:200],
+                budget_min=max(0, int(data.get("budgetMin") or 0)),
+                budget_max=min(5_000_000, max(1000, int(data.get("budgetMax") or 500000))),
                 stores=data.get("stores") or [],
-                recipient=data.get("recipient") or "cualquiera",
+                recipient=str(data.get("recipient") or "cualquiera")[:40],
             )
-            body = json.dumps(result, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        except Exception as exc:
-            body = json.dumps({"error": str(exc), "items": [], "storeStatuses": {}}).encode("utf-8")
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            return self._send_json(200, result)
+        except Exception:
+            return self._send_json(500, {"error": "No se pudo completar la búsqueda.", "items": [], "storeStatuses": {}})
