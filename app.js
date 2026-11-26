@@ -69,19 +69,27 @@
       const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
       return `sha256$${useSalt}$${hex}`;
     }
-    return `plain$${useSalt}$${password}`;
+    // Fallback determinista para contextos locales sin WebCrypto (ej. file://) sin guardar texto plano
+    let h1 = 0x811c9dc5;
+    let h2 = 0x01000193;
+    const input = useSalt + ':' + password;
+    for (let i = 0; i < input.length; i++) {
+      const c = input.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 ^ (c + i), 0x85ebca6b) >>> 0;
+    }
+    return `fnv$${useSalt}$${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
   }
 
   async function verifyLocalPassword(password, storedRecord) {
     if (!storedRecord) return false;
-    if (storedRecord.passwordHash && storedRecord.passwordHash.startsWith('sha256$')) {
+    if (storedRecord.passwordHash && (storedRecord.passwordHash.startsWith('sha256$') || storedRecord.passwordHash.startsWith('fnv$'))) {
       const parts = storedRecord.passwordHash.split('$');
       if (parts.length === 3) {
         const computed = await hashLocalPassword(password, parts[1]);
         return computed === storedRecord.passwordHash;
       }
     }
-    // Compatibilidad con cuentas demo previas
     return typeof storedRecord.password === 'string' && storedRecord.password === password;
   }
 
@@ -161,13 +169,13 @@
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
   }
 
-  function ensureDemoUserLocal() {
+  async function ensureDemoUserLocal() {
     const users = loadLocalUsers();
     if (!users['demo@regalacl.cl']) {
       users['demo@regalacl.cl'] = {
         name: 'Usuario Demo',
         email: 'demo@regalacl.cl',
-        password: 'demo',
+        passwordHash: await hashLocalPassword('demo'),
         savedGifts: [
           {
             ...CATALOG[9],
@@ -199,7 +207,7 @@
   }
 
   async function restoreSession() {
-    ensureDemoUserLocal();
+    await ensureDemoUserLocal();
     const raw = localStorage.getItem(STORAGE_KEYS.SESSION);
     if (!raw) return;
     try {
@@ -323,7 +331,7 @@
         // fallback
       }
     }
-    ensureDemoUserLocal();
+    await ensureDemoUserLocal();
     const users = loadLocalUsers();
     state.user = { ...users['demo@regalacl.cl'] };
     persistCurrentUserLocal();

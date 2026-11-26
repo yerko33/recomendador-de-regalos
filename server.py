@@ -137,6 +137,12 @@ class RegalaHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'; "
+            "frame-ancestors 'none'; base-uri 'self'",
+        )
 
     def _send_json(self, status: int, payload: dict):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -271,7 +277,9 @@ class RegalaHandler(BaseHTTPRequestHandler):
                 user = self._get_auth_user(conn)
                 if not user:
                     return self._send_json(401, {"error": "Inicia sesión para guardar regalos."})
-                gift = data.get("gift") or {}
+                gift = data.get("gift")
+                if not isinstance(gift, dict):
+                    return self._send_json(400, {"error": "Regalo inválido."})
                 gid = str(gift.get("id") or "")[:100]
                 if not gid:
                     return self._send_json(400, {"error": "Regalo inválido."})
@@ -290,7 +298,9 @@ class RegalaHandler(BaseHTTPRequestHandler):
                 user = self._get_auth_user(conn)
                 if not user:
                     return self._send_json(401, {"error": "Inicia sesión para guardar búsquedas."})
-                search = data.get("search") or {}
+                search = data.get("search")
+                if not isinstance(search, dict):
+                    return self._send_json(400, {"error": "Búsqueda inválida."})
                 conn.execute(
                     "INSERT INTO saved_searches (user_id, search_json) VALUES (?, ?)",
                     (user["id"], json.dumps(search, ensure_ascii=False)),
@@ -299,13 +309,24 @@ class RegalaHandler(BaseHTTPRequestHandler):
                 return self._send_json(200, {"ok": True})
 
         if parsed.path == "/api/scrape":
+            interests = data.get("interests")
+            stores = data.get("stores")
+            if interests is not None and not isinstance(interests, list):
+                return self._send_json(400, {"error": "Campo 'interests' inválido.", "items": [], "storeStatuses": {}})
+            if stores is not None and not isinstance(stores, list):
+                return self._send_json(400, {"error": "Campo 'stores' inválido.", "items": [], "storeStatuses": {}})
+            try:
+                budget_min = max(0, int(data.get("budgetMin") or 0))
+                budget_max = min(5_000_000, max(1000, int(data.get("budgetMax") or 500000)))
+            except (TypeError, ValueError):
+                return self._send_json(400, {"error": "Presupuesto inválido.", "items": [], "storeStatuses": {}})
             try:
                 result = scrape_chilean_stores(
-                    interests=data.get("interests") or [],
+                    interests=interests or [],
                     reference=str(data.get("reference") or "")[:200],
-                    budget_min=max(0, int(data.get("budgetMin") or 0)),
-                    budget_max=min(5_000_000, max(1000, int(data.get("budgetMax") or 500000))),
-                    stores=data.get("stores") or [],
+                    budget_min=budget_min,
+                    budget_max=budget_max,
+                    stores=stores or [],
                     recipient=str(data.get("recipient") or "cualquiera")[:40],
                 )
                 return self._send_json(200, result)

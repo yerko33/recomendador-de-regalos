@@ -42,12 +42,25 @@ class handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 return self._send_json(400, {"error": "Formato inválido.", "items": [], "storeStatuses": {}})
 
+            interests = data.get("interests")
+            stores = data.get("stores")
+            if interests is not None and not isinstance(interests, list):
+                return self._send_json(400, {"error": "Campo 'interests' debe ser una lista.", "items": [], "storeStatuses": {}})
+            if stores is not None and not isinstance(stores, list):
+                return self._send_json(400, {"error": "Campo 'stores' debe ser una lista.", "items": [], "storeStatuses": {}})
+
+            try:
+                budget_min = max(0, int(data.get("budgetMin") or 0))
+                budget_max = min(5_000_000, max(1000, int(data.get("budgetMax") or 500000)))
+            except (TypeError, ValueError):
+                return self._send_json(400, {"error": "Presupuesto inválido.", "items": [], "storeStatuses": {}})
+
             result = scrape_chilean_stores(
-                interests=data.get("interests") or [],
+                interests=interests or [],
                 reference=str(data.get("reference") or "")[:200],
-                budget_min=max(0, int(data.get("budgetMin") or 0)),
-                budget_max=min(5_000_000, max(1000, int(data.get("budgetMax") or 500000))),
-                stores=data.get("stores") or [],
+                budget_min=budget_min,
+                budget_max=budget_max,
+                stores=stores or [],
                 recipient=str(data.get("recipient") or "cualquiera")[:40],
             )
             return self._send_json(200, result)
