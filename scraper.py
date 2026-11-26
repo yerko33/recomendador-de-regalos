@@ -133,11 +133,14 @@ INTEREST_QUERY_MAP = {
     "hogar": "difusor aromas decoracion",
     "musica": "parlante audifonos bluetooth",
     "lectura": "libreta moleskine libros",
-    "moda": "billetera cartera aros joya",
+    "moda": "poleron chaqueta polera ropa",
+    "accesorios": "billetera cartera aros joya",
     "bienestar": "masajeador spa velas",
     "mascotas": "cama juguete perro gato",
     "juguetes": "juguete didactico lego",
     "bebes": "juguete bebe sonajero manta",
+    "automovil": "accesorios auto soporte cargador aspiradora",
+    "herramientas": "set herramientas destornillador caja",
 }
 
 INTEREST_VOCAB = {
@@ -204,11 +207,16 @@ INTEREST_VOCAB = {
         "acrilic", "acuarela", "pincel", "dibujo", "arte", "comic", "manga",
     ],
     "moda": [
+        "poleron", "chaqueta", "polera", "camisa", "blusa", "sweater", "chaleco",
+        "pantalon", "jeans", "vestido", "falda", "pijama", "bata", "parka",
+        "cortaviento", "polar", "calcetin", "zapatilla", "botin", "ropa",
+        "bufanda", "panuelo", "gorro", "guante", "camiseta", "short", "bermuda",
+    ],
+    "accesorios": [
         "aro", "aros", "arete", "pendiente", "argolla", "collar", "colgante",
         "pulsera", "anillo", "joya", "plata 925", "bano de oro", "oro ",
         "billetera", "cartera", "bolso", "mochila", "bandolera", "lente", "gafa",
-        "reloj", "bufanda", "panuelo", "cinturon", "gorro", "chaqueta",
-        "poleron", "zapatilla", "cuero", "accesorio",
+        "reloj", "cinturon", "cuero", "accesorio",
     ],
     "bienestar": [
         "masaje", "spa", "vela", "difusor", "aroma", "aceite esencial", "sales",
@@ -228,6 +236,19 @@ INTEREST_VOCAB = {
         "bebe", "sonajero", "mordedor", "estimulacion", "manta", "peluche",
         "gimnasio bebe", "movil cuna", "babero", "chupete", "mamadera",
         "pijama", "body ", "osito", "didactico", "fisher price", "chicco",
+    ],
+    "automovil": [
+        "auto", "vehiculo", "automovil", "soporte celular", "aspiradora",
+        "cargador auto", "maletero", "volante", "asiento", "funda", "compresor",
+        "inflador", "cera", "shampoo auto", "microfibra", "dashcam", "parasol",
+        "aromatizante", "llavero", "espejo", "led auto", "organizador auto",
+    ],
+    "herramientas": [
+        "herramienta", "taladro", "atornillador", "destornillador", "llave",
+        "alicate", "martillo", "caja herramienta", "maletin", "chicharra",
+        "dado", "cinta metrica", "huincha", "nivel", "sierra", "multiuso",
+        "linterna", "bosch", "makita", "stanley", "bauker", "black decker",
+        "truper", "einhell", "broca", "prensa", "soldador",
     ],
 }
 
@@ -324,8 +345,8 @@ def _is_blocked_product(norm_title: str, interests: list, recipient: str, store_
         return True
     if "lectura" not in interest_set and re.search(r"\b(libro|novela|cuento|enciclopedia)\b", norm_title):
         return True
-    # Evitar homónimos de "aros" (flotadores de piscina, bicicletas aro 26, aros de luz, etc.) en Moda
-    if "moda" in interest_set and not (interest_set & {"deporte", "juguetes", "hogar"}):
+    # Evitar homónimos de "aros" (flotadores de piscina, bicicletas aro 26, aros de luz, etc.) en Moda/Accesorios
+    if (interest_set & {"moda", "accesorios"}) and not (interest_set & {"deporte", "juguetes", "hogar", "automovil"}):
         if re.search(r"\b(flotador\w*|inflable\w*|piscina\w*|bestway|intex|colchoneta\w*|bicicleta\w*|neumatico\w*|llanta\w*|basquet\w*|tripode\w*|aro de luz|aro \d{2}|cortina\w*|ducha)\b", norm_title):
             return True
 
@@ -685,9 +706,9 @@ def scrape_abc(query: str, min_price: int, max_price: int, interests: list, refe
 
 
 def scrape_cencosud_supermarket(store_id: str, domain: str, query: str, min_price: int, max_price: int, interests: list, reference: str, recipient: str):
-    # Supermercados (Jumbo/Santa Isabel) no son relevantes para joyería/moda/gaming puro
+    # Supermercados (Jumbo/Santa Isabel) no son relevantes para ropa/joyería/gaming/herramientas puro
     interest_set = set(interests or [])
-    if interest_set and interest_set.issubset({"moda", "gaming"}):
+    if interest_set and interest_set.issubset({"moda", "accesorios", "gaming", "herramientas"}):
         return []
 
     q = urllib.parse.quote(query)

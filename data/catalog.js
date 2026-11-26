@@ -26,11 +26,14 @@ window.REGALACL_INTERESTS = [
   { id: 'hogar', label: 'Hogar & Deco', icon: '🛋️' },
   { id: 'musica', label: 'Música & Audio', icon: '🎧' },
   { id: 'lectura', label: 'Lectura & Papelería', icon: '📚' },
-  { id: 'moda', label: 'Moda & Accesorios', icon: '👜' },
+  { id: 'moda', label: 'Moda', icon: '👕' },
+  { id: 'accesorios', label: 'Accesorios', icon: '💍' },
   { id: 'bienestar', label: 'Bienestar & Relax', icon: '🧘' },
   { id: 'mascotas', label: 'Mascotas', icon: '🐾' },
   { id: 'juguetes', label: 'Juguetes', icon: '🧸' },
-  { id: 'bebes', label: 'Bebés', icon: '👶' }
+  { id: 'bebes', label: 'Bebés', icon: '👶' },
+  { id: 'automovil', label: 'Automóvil', icon: '🚗' },
+  { id: 'herramientas', label: 'Herramientas', icon: '🛠️' }
 ];
 
 window.REGALACL_CATALOG = [

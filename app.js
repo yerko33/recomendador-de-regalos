@@ -15,7 +15,7 @@
     backendOnline: false,
     backendAuth: false,
     user: null,
-    selectedInterests: ['tecnologia', 'cafe_vinos'],
+    selectedInterests: [],
     selectedStores: STORES.map(s => s.id),
     budgetMin: 0,
     budgetMax: 20000,
@@ -1041,7 +1041,6 @@
     bindGlobalEvents();
     await checkBackend();
     await restoreSession();
-    runRecommendationSearch();
   }
 
   init();
